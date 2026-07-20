@@ -1,0 +1,56 @@
+from telegram import ReplyKeyboardMarkup
+
+from utils.i18n import translate
+
+
+def main_menu(language="ru"):
+
+    keyboard = [
+        [
+            translate(language, "download"),
+            "👤 Профиль",
+        ],
+        [
+            translate(language, "history"),
+            translate(language, "settings"),
+        ],
+        [
+            translate(language, "help"),
+            "💎 Купить Premium",
+        ],
+    ]
+
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+def service_menu(language="ru"):
+
+    keyboard = [
+        ["📸 Instagram", "▶YouTube"],
+        ["🎵 TikTok", "📌 Pinterest"],
+        [translate(language, "back")],
+    ]
+
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+def premium_menu():
+
+    keyboard = [
+        ["⭐ +10 скачиваний — 10⭐"],
+        ["🔥 +30 скачиваний — 25⭐"],
+        ["🚀 Безлимит на 24 часа — 50⭐"],
+        ["👑 Premium 30 дней — 99⭐"],
+        ["⬅️ Назад"],
+    ]
+
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        is_persistent=True,
+    )

@@ -1,0 +1,29 @@
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Байткод Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Секреты и конфиденциальные данные — НЕ должны попадать в git
+.env
+cookies.txt
+
+# Базы данных (содержат персональные данные пользователей)
+database/*.db
+*.db
+
+# Временные и рабочие директории проекта
+downloads/
+cache/
+logs/
+
+# IDE / ОС
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
