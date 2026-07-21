@@ -1,29 +1,27 @@
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("MENU:", update.message.text)
+from multiprocessing import context
 from turtle import update
-
 from telegram import Update
 from telegram.ext import ContextTypes
-
 from database.database import get_history, get_user_settings
 from handlers.settings import show_settings
 from keyboards.main_menu import main_menu, service_menu
 from utils.i18n import translate
 from handlers.profile import profile_command
 
-SERVICE_BUTTONS = {
+SERVICE_BUTTONS: dict[str, str] = {
     "📷 Instagram": "instagram",
     "▶️ YouTube": "youtube",
     "🎵 TikTok": "tiktok",
     "📌 Pinterest": "pinterest",
 }
-
-
 def get_action(text):
     for language in ("ru", "uz", "en"):
         for action in ("download", "history", "settings", "help", "back"):
             if text == translate(language, action):
                 return action
     return None
-
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -40,6 +38,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif text in SERVICE_BUTTONS:
+        print("Нажата кнопка:", text)
+        print("До:", context.user_data)
+
+        context.user_data["selected_service"] = SERVICE_BUTTONS[text]
+        print("selected_service =", context.user_data["selected_service"])
+        print("После:", context.user_data)
         context.user_data["selected_service"] = SERVICE_BUTTONS[text]
         await update.message.reply_text(
             translate(language, "send_service_link", service=text[2:]),

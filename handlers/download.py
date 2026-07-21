@@ -1,5 +1,7 @@
+from multiprocessing import context
 from pydoc import text
 import re
+from turtle import update
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -11,7 +13,6 @@ import downloaders.youtube
 from keyboards.main_menu import service_menu
 from database.database import get_user_settings
 from utils.i18n import translate
-
 
 INSTAGRAM_PATTERN = r"(https?://(?:www\.)?instagram\.com/[^\s]+)"
 YOUTUBE_PATTERN = (
@@ -28,30 +29,19 @@ SERVICES = {
     "pinterest": ("Pinterest", PINTEREST_PATTERN, downloaders.pinterest.download_pinterest),
 }
 
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
+    print("DOWNLOAD:", update.message.text)
+    print("user_data =", context.user_data)
+    
     if not update.message or not update.message.text:
         return
 
     text = update.message.text.strip()
-    IGNORE_BUTTONS = {
-    "👤 Профиль",
-    "💎 Купить Premium",
-    "⭐ Premium",
-    "📥 Скачать",
-    "📜 История",
-    "⚙️ Настройки",
-    "ℹ️ Помощь",
-    "⬅️ Назад",
-}
-
-    if text in IGNORE_BUTTONS:
-        return
     language = get_user_settings(update.effective_user.id)["language"]
 
     selected_service = context.user_data.get("selected_service")
-
+    print("selected_service =", selected_service)
+    print("user_data =", context.user_data)
     if not selected_service:
 
         await update.message.reply_text(

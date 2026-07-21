@@ -29,7 +29,7 @@ def main_menu(language="ru"):
 def service_menu(language="ru"):
 
     keyboard = [
-        ["📸 Instagram", "▶YouTube"],
+        ["📷 Instagram", "▶️ YouTube"],
         ["🎵 TikTok", "📌 Pinterest"],
         [translate(language, "back")],
     ]

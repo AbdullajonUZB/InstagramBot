@@ -40,12 +40,11 @@ def main():
             pattern=r"^settings:"
         )
     )
-
-    # Главное меню
     app.add_handler(
         MessageHandler(
             filters.Regex(
-                r"^(📥 Скачать|📥 Yuklab olish|📥 Download|"
+                r"^(👤 Профиль|"
+                r"📥 Скачать|📥 Yuklab olish|📥 Download|"
                 r"📜 История|📜 Tarix|📜 History|"
                 r"⚙ Настройки|⚙ Sozlamalar|⚙ Settings|"
                 r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
@@ -53,26 +52,32 @@ def main():
                 r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
             ),
             menu,
-        )
+        ),
+        group=0,
     )
-
-    # Все остальные сообщения
     app.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            filters.TEXT
+            & ~filters.COMMAND
+            & ~filters.Regex(
+                r"^(👤 Профиль|"
+                r"📥 Скачать|📥 Yuklab olish|📥 Download|"
+                r"📜 История|📜 Tarix|📜 History|"
+                r"⚙ Настройки|⚙ Sozlamalar|⚙ Settings|"
+                r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
+                r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|"
+                r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
+            ),
             handle_message,
-        )
+        ),
+        group=1,
     )
-
     # Глобальный обработчик ошибок
     app.add_error_handler(error_handler)
-
     logger.info("=" * 50)
     logger.info("Instagram Downloader started")
     logger.info("=" * 50)
 
     app.run_polling()
-
-
 if __name__ == "__main__":
     main()
