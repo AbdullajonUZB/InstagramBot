@@ -1,6 +1,7 @@
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("MENU:", update.message.text)
 from multiprocessing import context
+from pydoc import text
 from turtle import update
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -9,13 +10,8 @@ from handlers.settings import show_settings
 from keyboards.main_menu import main_menu, service_menu
 from utils.i18n import translate
 from handlers.profile import profile_command
+from services import SERVICES
 
-SERVICE_BUTTONS: dict[str, str] = {
-    "📷 Instagram": "instagram",
-    "▶️ YouTube": "youtube",
-    "🎵 TikTok": "tiktok",
-    "📌 Pinterest": "pinterest",
-}
 def get_action(text):
     for language in ("ru", "uz", "en"):
         for action in ("download", "history", "settings", "help", "back"):
@@ -37,17 +33,25 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=service_menu(language),
         )
 
-    elif text in SERVICE_BUTTONS:
-        print("Нажата кнопка:", text)
-        print("До:", context.user_data)
+    elif text in [service["button"] for service in SERVICES.values()]:
 
-        context.user_data["selected_service"] = SERVICE_BUTTONS[text]
-        print("selected_service =", context.user_data["selected_service"])
-        print("После:", context.user_data)
-        context.user_data["selected_service"] = SERVICE_BUTTONS[text]
-        await update.message.reply_text(
-            translate(language, "send_service_link", service=text[2:]),
-        )
+        print("SERVICE BUTTON PRESSED:", text)
+
+        for key, service in SERVICES.items():
+            if text == service["button"]:
+                context.user_data["selected_service"] = key
+
+                print("selected_service =", key)
+
+                await update.message.reply_text(
+                    translate(
+                        language,
+                        "send_service_link",
+                        service=service["button"][2:],
+                    ),
+                )
+
+                break
 
     elif action == "back":
         context.user_data.pop("selected_service", None)

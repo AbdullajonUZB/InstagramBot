@@ -1,7 +1,7 @@
 from telegram import ReplyKeyboardMarkup
 
 from utils.i18n import translate
-
+from services import SERVICES
 
 def main_menu(language="ru"):
 
@@ -25,14 +25,26 @@ def main_menu(language="ru"):
         resize_keyboard=True,
         is_persistent=True,
     )
+from services import SERVICES
+
 
 def service_menu(language="ru"):
 
-    keyboard = [
-        ["📷 Instagram", "▶️ YouTube"],
-        ["🎵 TikTok", "📌 Pinterest"],
-        [translate(language, "back")],
-    ]
+    keyboard = []
+
+    row = []
+
+    for service in SERVICES.values():
+        row.append(service["button"])
+
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
+
+    keyboard.append([translate(language, "back")])
 
     return ReplyKeyboardMarkup(
         keyboard,

@@ -5,10 +5,8 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-
 from config import BOT_TOKEN
 from database.database import create_database
-
 from handlers.start import start
 from handlers.download import handle_message
 from handlers.menu import menu
@@ -16,12 +14,9 @@ from handlers.admin import db
 from handlers.settings import settings_callback
 from handlers.profile import profile_command
 from handlers.error import error_handler
-
 from utils.logger import logger
 
-
 logger.info("Initializing Instagram Downloader...")
-
 
 def main():
     create_database()
@@ -48,7 +43,7 @@ def main():
                 r"📜 История|📜 Tarix|📜 History|"
                 r"⚙ Настройки|⚙ Sozlamalar|⚙ Settings|"
                 r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
-                r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|"
+                r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|📘 Facebook|"
                 r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
             ),
             menu,
@@ -65,7 +60,7 @@ def main():
                 r"📜 История|📜 Tarix|📜 History|"
                 r"⚙ Настройки|⚙ Sozlamalar|⚙ Settings|"
                 r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
-                r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|"
+                r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|📘 Facebook|"
                 r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
             ),
             handle_message,
