@@ -6,6 +6,8 @@ from pathlib import Path
 
 from yt_dlp import YoutubeDL
 
+from utils.i18n import t
+
 
 class BaseDownloader(ABC):
     def __init__(self, url, logger=None, temp_root=None):
@@ -59,6 +61,58 @@ class BaseDownloader(ABC):
 
         self.logger.debug("Validated downloaded file %s with size %s", file_path, size)
         return size
+
+    def resolve_downloaded_file(self, filename):
+        file_path = Path(filename)
+        if file_path.exists():
+            return file_path
+
+        if self.temp_dir is not None and self.temp_dir.exists():
+            files = [path for path in self.temp_dir.iterdir() if path.is_file()]
+            return files[0] if files else None
+
+        return None
+
+    async def resolve_validated_file(
+        self,
+        update,
+        filename,
+        max_size=None,
+        missing_return=False,
+        too_large_return=False,
+        missing_key="file_missing",
+        too_large_key="file_too_large",
+        empty_key="file_missing",
+    ):
+        file_path = self.resolve_downloaded_file(filename)
+        if not file_path or not file_path.exists():
+            await update.message.reply_text(t(update.effective_user.id, missing_key))
+            return None, missing_return
+
+        try:
+            self.validate_file(file_path, max_size=max_size)
+        except FileNotFoundError:
+            await update.message.reply_text(t(update.effective_user.id, missing_key))
+            return None, missing_return
+        except ValueError as error:
+            if "exceeds maximum size" in str(error):
+                await update.message.reply_text(t(update.effective_user.id, too_large_key))
+                return None, too_large_return
+            if "empty" in str(error):
+                await update.message.reply_text(t(update.effective_user.id, empty_key))
+                return None, missing_return
+            raise
+
+        return file_path, None
+
+    async def handle_error(self, update, error, error_key, logger_message, print_traceback=False):
+        if print_traceback:
+            import traceback
+
+            traceback.print_exc()
+
+        self.logger.error("%s: %s", logger_message, error, exc_info=True)
+        await update.message.reply_text(t(update.effective_user.id, error_key))
 
     def cleanup(self):
         if self.temp_dir and self.temp_dir.exists():

@@ -34,28 +34,17 @@ class FacebookDownloader(BaseDownloader):
             )
             logger.debug("Downloaded Facebook file path: %s", filename)
 
-            file_path = Path(filename)
-            if not file_path.exists():
-                files = [path for path in self.temp_dir.iterdir() if path.is_file()]
-                file_path = files[0] if files else None
-
-            if not file_path or not file_path.exists():
-                await update.message.reply_text(t(update.effective_user.id, "file_missing"))
+            file_path, validation_result = await self.resolve_validated_file(
+                update,
+                filename,
+                max_size=MAX_FILE_SIZE,
+                missing_return=False,
+                too_large_return=False,
+            )
+            if validation_result is not None:
+                return validation_result
+            if file_path is None:
                 return False
-
-            try:
-                self.validate_file(file_path, max_size=MAX_FILE_SIZE)
-            except FileNotFoundError:
-                await update.message.reply_text(t(update.effective_user.id, "file_missing"))
-                return False
-            except ValueError as error:
-                if "exceeds maximum size" in str(error):
-                    await update.message.reply_text(t(update.effective_user.id, "file_too_large"))
-                    return False
-                if "empty" in str(error):
-                    await update.message.reply_text(t(update.effective_user.id, "file_missing"))
-                    return False
-                raise
 
             extension = os.path.splitext(str(file_path))[1].lower()
             logger.debug("Facebook file extension: %s", extension)
@@ -79,10 +68,13 @@ class FacebookDownloader(BaseDownloader):
             return True
 
         except Exception as error:
-            traceback.print_exc()
-            logger.error("Facebook ERROR: %s", error, exc_info=True)
-
-            await update.message.reply_text(t(update.effective_user.id, "facebook_error"))
+            await self.handle_error(
+                update,
+                error,
+                "facebook_error",
+                "Facebook ERROR",
+                print_traceback=True,
+            )
             return False
 
         finally:
