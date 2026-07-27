@@ -1,25 +1,74 @@
 import asyncio
 import logging
 import os
-import shutil
-import tempfile
+from pathlib import Path
 
-import yt_dlp
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import MAX_FILE_SIZE
 from database.database import add_history
+from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
 
 logger = logging.getLogger(__name__)
 
 
-def _download_sync(ydl_opts: dict, url: str) -> str:
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info)
+class YoutubeDownloader(BaseDownloader):
+    def __init__(self, url: str, logger=None, temp_root=None):
+        super().__init__(url=url, logger=logger, temp_root=temp_root)
+
+    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.prepare_temp_dir()
+
+        try:
+            filename = await asyncio.to_thread(
+                self.download_media,
+                "%(title)s.%(ext)s",
+                {
+                    "format": "best[ext=mp4]/best",
+                    "merge_output_format": "mp4",
+                    "max_filesize": MAX_FILE_SIZE,
+                },
+            )
+
+            file_path = Path(filename)
+            if not file_path.exists():
+                files = [path for path in self.temp_dir.iterdir() if path.is_file()]
+                file_path = files[0] if files else None
+
+            if not file_path or not file_path.exists():
+                await update.message.reply_text(t(update.effective_user.id, "file_missing"))
+                return False
+
+            try:
+                self.validate_file(file_path, max_size=MAX_FILE_SIZE)
+            except FileNotFoundError:
+                await update.message.reply_text(t(update.effective_user.id, "file_missing"))
+                return False
+            except ValueError as error:
+                if "exceeds maximum size" in str(error):
+                    await update.message.reply_text(t(update.effective_user.id, "file_too_large"))
+                    return False
+                if "empty" in str(error):
+                    await update.message.reply_text(t(update.effective_user.id, "file_missing"))
+                    return False
+                raise
+
+            await send_video(update, str(file_path), t(update.effective_user.id, "youtube_video"))
+
+            add_history(update.effective_user.id, self.url, "YouTube видео")
+            return True
+
+        except Exception as error:
+            logger.error("YouTube ERROR: %s", error, exc_info=True)
+
+            await update.message.reply_text(t(update.effective_user.id, "youtube_error"))
+            return False
+
+        finally:
+            self.cleanup()
 
 
 async def download_youtube(
@@ -27,50 +76,5 @@ async def download_youtube(
     context: ContextTypes.DEFAULT_TYPE,
     url: str,
 ):
-    temp_dir = tempfile.mkdtemp(prefix="youtube_")
-    output = os.path.join(temp_dir, "%(title)s.%(ext)s")
-
-    ydl_opts = {
-        "outtmpl": output,
-        "format": "best[ext=mp4]/best",
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "merge_output_format": "mp4",
-        "max_filesize": MAX_FILE_SIZE,
-    }
-
-    try:
-        filename = await asyncio.to_thread(_download_sync, ydl_opts, url)
-
-        if not os.path.exists(filename):
-            files = [
-                os.path.join(temp_dir, file)
-                for file in os.listdir(temp_dir)
-                if os.path.isfile(os.path.join(temp_dir, file))
-            ]
-            filename = files[0] if files else None
-
-        if not filename or not os.path.exists(filename):
-            await update.message.reply_text(t(update.effective_user.id, "file_missing"))
-            return False
-
-        if os.path.getsize(filename) > MAX_FILE_SIZE:
-            await update.message.reply_text(t(update.effective_user.id, "file_too_large"))
-            return False
-
-        await send_video(update, filename, t(update.effective_user.id, "youtube_video"))
-
-        add_history(update.effective_user.id, url, "YouTube видео")
-        return True
-
-    except Exception as error:
-        logger.error("YouTube ERROR: %s", error, exc_info=True)
-
-        await update.message.reply_text(
-            t(update.effective_user.id, "youtube_error")
-        )
-        return False
-
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    downloader = YoutubeDownloader(url=url, logger=logger)
+    return await downloader.download(update, context)
