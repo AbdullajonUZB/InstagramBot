@@ -1,113 +1,90 @@
 import logging
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 DB_NAME = "database/history.db"
 
+FREE_DAILY_LIMIT = 10
+
 
 def connect():
-
     Path("database").mkdir(exist_ok=True)
 
     logger.debug("База: %s", Path(DB_NAME).resolve())
 
-    return sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA busy_timeout = 5000")
+    return conn
 
 
 def create_database():
+    with connect() as conn:
+        cursor = conn.cursor()
 
-    conn = connect()
-
-    cursor = conn.cursor()
-
-    # История скачиваний
-    
-    cursor.execute("""
-CREATE TABLE IF NOT EXISTS history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    url TEXT NOT NULL,
-    file_type TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-        # Пользователи
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users(
-
-    telegram_id INTEGER PRIMARY KEY,
-
-    username TEXT,
-
-    first_name TEXT,
-
-    is_premium INTEGER NOT NULL DEFAULT 0,
-
-    premium_until TEXT,
-
-    downloads_today INTEGER NOT NULL DEFAULT 0,
-
-    last_download_date TEXT
-)
-""")
-
-    # Журнал безопасности
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS security_log(
-
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-        telegram_id INTEGER,
-
-        username TEXT,
-
-        first_name TEXT,
-
-        action TEXT,
-
-        details TEXT,
-
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-
-    )
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS user_settings(
-        user_id INTEGER PRIMARY KEY,
-        send_format TEXT NOT NULL DEFAULT 'video',
-        history_enabled INTEGER NOT NULL DEFAULT 1,
-        language TEXT NOT NULL DEFAULT 'ru'
-    )
-    """)
-
-    # История скачиваний для админ-панели
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS downloads(
-
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-        telegram_id INTEGER,
-
-        username TEXT,
-
-        first_name TEXT,
-
-        url TEXT,
-
-        media_type TEXT,
-
-        status TEXT,
-
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-
-    )
-    """)
-
-    conn.commit()
-    conn.close()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                url TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users(
+                telegram_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                is_premium INTEGER NOT NULL DEFAULT 0,
+                premium_until TEXT,
+                downloads_today INTEGER NOT NULL DEFAULT 0,
+                last_download_date TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS security_log(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER,
+                username TEXT,
+                first_name TEXT,
+                action TEXT,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_settings(
+                user_id INTEGER PRIMARY KEY,
+                send_format TEXT NOT NULL DEFAULT 'video',
+                history_enabled INTEGER NOT NULL DEFAULT 1,
+                language TEXT NOT NULL DEFAULT 'ru'
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS downloads(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER,
+                username TEXT,
+                first_name TEXT,
+                url TEXT,
+                media_type TEXT,
+                status TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
 
 
 def add_download(
@@ -116,34 +93,31 @@ def add_download(
     first_name,
     url,
     media_type,
-    status
+    status,
 ):
-
-    conn = connect()
-
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    INSERT INTO downloads(
-        telegram_id,
-        username,
-        first_name,
-        url,
-        media_type,
-        status
-    )
-    VALUES(?,?,?,?,?,?)
-    """,(
-        telegram_id,
-        username,
-        first_name,
-        url,
-        media_type,
-        status
-    ))
-
-    conn.commit()
-    conn.close()
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO downloads(
+                telegram_id,
+                username,
+                first_name,
+                url,
+                media_type,
+                status
+            )
+            VALUES(?,?,?,?,?,?)
+            """,
+            (
+                telegram_id,
+                username,
+                first_name,
+                url,
+                media_type,
+                status,
+            ),
+        )
 
 
 def add_security_log(
@@ -151,81 +125,70 @@ def add_security_log(
     username,
     first_name,
     action,
-    details
+    details,
 ):
-
-    conn = connect()
-
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    INSERT INTO security_log(
-        telegram_id,
-        username,
-        first_name,
-        action,
-        details
-    )
-    VALUES(?,?,?,?,?)
-    """,(
-        telegram_id,
-        username,
-        first_name,
-        action,
-        details
-    
-        ))
-    
-    conn.commit()
-    conn.close()
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO security_log(
+                telegram_id,
+                username,
+                first_name,
+                action,
+                details
+            )
+            VALUES(?,?,?,?,?)
+            """,
+            (
+                telegram_id,
+                username,
+                first_name,
+                action,
+                details,
+            ),
+        )
 
 
 def get_history(user_id, limit=20):
-
-    conn = connect()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT file_type, url, created_at
-        FROM history
-        WHERE user_id = ?
-        ORDER BY id DESC
-        LIMIT ?
-        """,
-        (user_id, limit),
-    )
-
-    rows = cursor.fetchall()
-
-    conn.close()
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT file_type, url, created_at
+            FROM history
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+        rows = cursor.fetchall()
 
     return rows
 
+
 def get_user_settings(user_id):
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO user_settings (user_id)
+            VALUES (?)
+            """,
+            (user_id,),
+        )
+        cursor.execute(
+            """
+            SELECT send_format, history_enabled, language
+            FROM user_settings
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone()
 
-    conn = connect()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO user_settings (user_id)
-        VALUES (?)
-        """,
-        (user_id,),
-    )
-    cursor.execute(
-        """
-        SELECT send_format, history_enabled, language
-        FROM user_settings
-        WHERE user_id = ?
-        """,
-        (user_id,),
-    )
-    send_format, history_enabled, language = cursor.fetchone()
-
-    conn.commit()
-    conn.close()
+    send_format, history_enabled, language = row
 
     return {
         "send_format": send_format,
@@ -235,7 +198,6 @@ def get_user_settings(user_id):
 
 
 def update_user_settings(user_id, **settings):
-
     allowed = {"send_format", "history_enabled", "language"}
     values = {key: value for key, value in settings.items() if key in allowed}
 
@@ -244,120 +206,120 @@ def update_user_settings(user_id, **settings):
 
     get_user_settings(user_id)
 
-    conn = connect()
-    cursor = conn.cursor()
-    columns = ", ".join(f"{key} = ?" for key in values)
-
-    cursor.execute(
-        f"UPDATE user_settings SET {columns} WHERE user_id = ?",
-        (*values.values(), user_id),
-    )
-
-    conn.commit()
-    conn.close()
+    with connect() as conn:
+        cursor = conn.cursor()
+        columns = ", ".join(f"{key} = ?" for key in values)
+        cursor.execute(
+            f"UPDATE user_settings SET {columns} WHERE user_id = ?",
+            (*values.values(), user_id),
+        )
 
 
 def clear_history(user_id):
-
-    conn = connect()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM history WHERE user_id = ?", (user_id,))
-    conn.commit()
-    conn.close()
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM history WHERE user_id = ?", (user_id,))
 
 
 def add_history(user_id, url, file_type):
-
     if not get_user_settings(user_id)["history_enabled"]:
         return
 
-    conn = connect()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO history (
-            user_id,
-            url,
-            file_type
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO history (
+                user_id,
+                url,
+                file_type
+            )
+            VALUES (?, ?, ?)
+            """,
+            (
+                user_id,
+                url,
+                file_type,
+            ),
         )
-        VALUES (?, ?, ?)
-        """,
-        (
-            user_id,
-            url,
-            file_type,
-        ),
-    )
 
-    conn.commit()
     logger.info("История сохранена! Записан user_id: %s", user_id)
-    conn.close()
-from datetime import date
-
-FREE_DAILY_LIMIT = 10
 
 
 def register_user(telegram_id, username, first_name):
-
-    conn = connect()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO users(
-            telegram_id,
-            username,
-            first_name
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO users(
+                telegram_id,
+                username,
+                first_name
+            )
+            VALUES(?,?,?)
+            """,
+            (
+                telegram_id,
+                username,
+                first_name,
+            ),
         )
-        VALUES(?,?,?)
-        """,
-        (
-            telegram_id,
-            username,
-            first_name,
-        ),
-    )
 
-    conn.commit()
-    conn.close()
+
 def can_download(telegram_id):
-
     today = date.today().isoformat()
 
-    conn = connect()
-    cursor = conn.cursor()
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                is_premium,
+                downloads_today,
+                last_download_date
+            FROM users
+            WHERE telegram_id = ?
+            """,
+            (telegram_id,),
+        )
 
-    cursor.execute(
-        """
-        SELECT
-            is_premium,
-            downloads_today,
-            last_download_date
-        FROM users
-        WHERE telegram_id = ?
-        """,
-        (telegram_id,),
-    )
+        row = cursor.fetchone()
 
-    row = cursor.fetchone()
+        if row is None:
+            return True
 
-    if row is None:
-        conn.close()
-        return True
+        is_premium, downloads_today, last_download_date = row
 
-    is_premium, downloads_today, last_download_date = row
+        if is_premium:
+            return True
 
-    if is_premium:
-        conn.close()
-        return True
+        if last_download_date != today:
+            cursor.execute(
+                """
+                UPDATE users
+                SET downloads_today = 0,
+                    last_download_date = ?
+                WHERE telegram_id = ?
+                """,
+                (
+                    today,
+                    telegram_id,
+                ),
+            )
+            downloads_today = 0
 
-    if last_download_date != today:
+        return downloads_today < FREE_DAILY_LIMIT
 
+
+def increase_download_count(telegram_id):
+    today = date.today().isoformat()
+
+    with connect() as conn:
+        cursor = conn.cursor()
         cursor.execute(
             """
             UPDATE users
-            SET downloads_today = 0,
+            SET downloads_today = downloads_today + 1,
                 last_download_date = ?
             WHERE telegram_id = ?
             """,
@@ -367,51 +329,23 @@ def can_download(telegram_id):
             ),
         )
 
-        conn.commit()
 
-        downloads_today = 0
-
-    conn.close()
-
-    return downloads_today < FREE_DAILY_LIMIT
-
-
-def increase_download_count(telegram_id):
-
-    today = date.today().isoformat()
-
-    conn = connect()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        UPDATE users
-        SET downloads_today = downloads_today + 1,
-            last_download_date = ?
-        WHERE telegram_id = ?
-        """,
-        (
-            today,
-            telegram_id,
-        ),
-    )
 def get_user_profile(telegram_id: int):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT
-            first_name,
-            username,
-            is_premium,
-            premium_until,
-            downloads_today
-        FROM users
-        WHERE telegram_id = ?
-    """, (telegram_id,))
-
-    profile = cursor.fetchone()
-
-    conn.close()
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                first_name,
+                username,
+                is_premium,
+                premium_until,
+                downloads_today
+            FROM users
+            WHERE telegram_id = ?
+            """,
+            (telegram_id,),
+        )
+        profile = cursor.fetchone()
 
     return profile
