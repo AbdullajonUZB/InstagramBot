@@ -5,19 +5,26 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_NAME = "database/history.db"
+DB_NAME = str(Path(__file__).resolve().parent / "history.db")
 
 FREE_DAILY_LIMIT = 10
 
 
 def connect():
-    Path("database").mkdir(exist_ok=True)
+    Path(__file__).resolve().parent.mkdir(exist_ok=True)
 
     logger.debug("База: %s", Path(DB_NAME).resolve())
 
     conn = sqlite3.connect(DB_NAME)
     conn.execute("PRAGMA busy_timeout = 5000")
     return conn
+
+
+def _ensure_column(conn, table_name, column_name, definition):
+    cursor = conn.execute(f"PRAGMA table_info({table_name})")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+    if column_name not in existing_columns:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
 def create_database():
@@ -85,6 +92,25 @@ def create_database():
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bonus_requests(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                username TEXT,
+                first_name TEXT,
+                request_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                bonus_downloads INTEGER NOT NULL DEFAULT 0,
+                approved_by INTEGER,
+                approved_at TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        _ensure_column(conn, "users", "registered_at", "TEXT")
+        _ensure_column(conn, "users", "bonus_downloads_total", "INTEGER NOT NULL DEFAULT 0")
 
 
 def add_download(
@@ -254,14 +280,29 @@ def register_user(telegram_id, username, first_name):
             INSERT OR IGNORE INTO users(
                 telegram_id,
                 username,
-                first_name
+                first_name,
+                registered_at
             )
-            VALUES(?,?,?)
+            VALUES(?,?,?, datetime('now'))
             """,
             (
                 telegram_id,
                 username,
                 first_name,
+            ),
+        )
+        cursor.execute(
+            """
+            UPDATE users
+            SET username = ?,
+                first_name = ?,
+                registered_at = COALESCE(registered_at, datetime('now'))
+            WHERE telegram_id = ?
+            """,
+            (
+                username,
+                first_name,
+                telegram_id,
             ),
         )
 
@@ -330,6 +371,138 @@ def increase_download_count(telegram_id):
         )
 
 
+def get_user_total_downloads(telegram_id: int):
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM history WHERE user_id = ?",
+            (telegram_id,),
+        )
+        count = cursor.fetchone()[0]
+
+    return int(count or 0)
+
+
+def create_bonus_download_request(user_id, username, first_name):
+    today = date.today().isoformat()
+
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id
+            FROM bonus_requests
+            WHERE user_id = ?
+              AND request_date = ?
+              AND status IN ('pending', 'approved')
+            """,
+            (user_id, today),
+        )
+        if cursor.fetchone():
+            return None
+
+        cursor.execute(
+            """
+            INSERT INTO bonus_requests (
+                user_id,
+                username,
+                first_name,
+                request_date,
+                status
+            )
+            VALUES (?, ?, ?, ?, 'pending')
+            """,
+            (user_id, username, first_name, today),
+        )
+        return cursor.lastrowid
+
+
+def has_active_bonus_request(user_id):
+    today = date.today().isoformat()
+
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT 1
+            FROM bonus_requests
+            WHERE user_id = ?
+              AND request_date = ?
+              AND status IN ('pending', 'approved')
+            """,
+            (user_id, today),
+        )
+        return cursor.fetchone() is not None
+
+
+def get_bonus_request(request_id):
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, user_id, username, first_name, request_date, status, bonus_downloads, approved_by, approved_at
+            FROM bonus_requests
+            WHERE id = ?
+            """,
+            (request_id,),
+        )
+        return cursor.fetchone()
+
+
+def approve_bonus_request(request_id, bonus_downloads, approved_by):
+    today = date.today().isoformat()
+
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT user_id FROM bonus_requests WHERE id = ?",
+            (request_id,),
+        )
+        request = cursor.fetchone()
+        if not request:
+            return False
+
+        user_id = request[0]
+        cursor.execute(
+            """
+            UPDATE bonus_requests
+            SET status = 'approved',
+                bonus_downloads = ?,
+                approved_by = ?,
+                approved_at = datetime('now')
+            WHERE id = ?
+            """,
+            (bonus_downloads, approved_by, request_id),
+        )
+        cursor.execute(
+            """
+            UPDATE users
+            SET downloads_today = downloads_today + ?,
+                last_download_date = ?,
+                bonus_downloads_total = bonus_downloads_total + ?
+            WHERE telegram_id = ?
+            """,
+            (bonus_downloads, today, bonus_downloads, user_id),
+        )
+        return True
+
+
+def decline_bonus_request(request_id, approved_by):
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE bonus_requests
+            SET status = 'declined',
+                approved_by = ?,
+                approved_at = datetime('now')
+            WHERE id = ?
+            """,
+            (approved_by, request_id),
+        )
+        return cursor.rowcount > 0
+
+
 def get_user_profile(telegram_id: int):
     with connect() as conn:
         cursor = conn.cursor()
@@ -340,7 +513,9 @@ def get_user_profile(telegram_id: int):
                 username,
                 is_premium,
                 premium_until,
-                downloads_today
+                downloads_today,
+                registered_at,
+                bonus_downloads_total
             FROM users
             WHERE telegram_id = ?
             """,

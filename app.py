@@ -10,7 +10,12 @@ from database.database import create_database
 from handlers.start import start
 from handlers.download import handle_message
 from handlers.menu import menu
-from handlers.admin import db
+from handlers.admin import (
+    db,
+    handle_bonus_request,
+    handle_premium_stub,
+    handle_admin_bonus_action,
+)
 from handlers.settings import settings_callback
 from handlers.profile import profile_command
 from handlers.error import error_handler
@@ -34,6 +39,15 @@ def main():
             settings_callback,
             pattern=r"^settings:"
         )
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_bonus_request, pattern=r"^bonus_request$")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_premium_stub, pattern=r"^premium_stub$")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_bonus_action, pattern=r"^admin_bonus:")
     )
     app.add_handler(
         MessageHandler(

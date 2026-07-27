@@ -3,7 +3,7 @@ import logging
 import os
 from pathlib import Path
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from config import MAX_FILE_SIZE
@@ -34,11 +34,21 @@ class InstagramDownloader(BaseDownloader):
         )
 
         if not can_download(user.id):
-            await update.message.reply_text(
-                "🚫 Вы использовали все 10 бесплатных скачиваний на сегодня.\n\n"
-                "Попробуйте снова завтра или оформите Premium ⭐"
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("⭐ Купить Premium", callback_data="premium_stub")],
+                    [InlineKeyboardButton("🎁 Запросить дополнительные скачивания", callback_data="bonus_request")],
+                ]
             )
-            return
+            await update.message.reply_text(
+                "🚫 Вы использовали все бесплатные скачивания на сегодня.\n\n"
+                "Следующий лимит будет доступен после наступления нового дня.\n\n"
+                "Вы можете:\n\n"
+                "⭐ Купить Premium\n"
+                "🎁 Запросить дополнительные скачивания",
+                reply_markup=keyboard,
+            )
+            return True
 
         self.prepare_temp_dir()
 
