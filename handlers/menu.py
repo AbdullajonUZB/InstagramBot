@@ -1,5 +1,3 @@
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("MENU:", update.message.text)
 from multiprocessing import context
 from pydoc import text
 from turtle import update
@@ -11,6 +9,8 @@ from keyboards.main_menu import main_menu, service_menu
 from utils.i18n import translate
 from handlers.profile import profile_command
 from services import SERVICES
+from utils.message_utils import get_message_target
+
 
 def get_action(text):
     for language in ("ru", "uz", "en"):
@@ -20,7 +20,8 @@ def get_action(text):
     return None
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    message = get_message_target(update)
+    text = getattr(message, "text", None)
     user_id = update.effective_user.id
     settings = get_user_settings(user_id)
     language = settings["language"]
@@ -28,7 +29,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == "download":
         context.user_data.pop("selected_service", None)
-        await update.message.reply_text(
+        await message.reply_text(
             translate(language, "choose_service"),
             reply_markup=service_menu(language),
         )
@@ -43,7 +44,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 print("selected_service =", key)
 
-                await update.message.reply_text(
+                await message.reply_text(
                     translate(
                         language,
                         "send_service_link",
@@ -55,7 +56,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif action == "back":
         context.user_data.pop("selected_service", None)
-        await update.message.reply_text(
+        await message.reply_text(
             translate(language, "main_menu"),
             reply_markup=main_menu(language),
         )
@@ -64,7 +65,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = get_history(user_id)
 
         if not history:
-            await update.message.reply_text(translate(language, "history_empty"))
+            await message.reply_text(translate(language, "history_empty"))
             return
 
         message = translate(language, "history_title")
@@ -72,12 +73,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_type, url, created_at = item
             message += f"{index}. {file_type}\n📅 {created_at}\n🔗 {url}\n\n"
 
-        await update.message.reply_text(message)
+        await message.reply_text(message)
 
     elif action == "settings":
         await show_settings(update, context)
 
     elif action == "help":
-        await update.message.reply_text(translate(language, "help_text"))
+        await message.reply_text(translate(language, "help_text"))
     elif text == "👤 Профиль":
         await profile_command(update, context)

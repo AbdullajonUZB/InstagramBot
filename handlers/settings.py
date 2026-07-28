@@ -11,6 +11,7 @@ from keyboards.settings import (
 )
 from keyboards.main_menu import main_menu
 from utils.i18n import translate
+from utils.message_utils import get_message_target
 
 
 def settings_text(settings):
@@ -29,7 +30,8 @@ def settings_text(settings):
 
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     settings = get_user_settings(update.effective_user.id)
-    await update.message.reply_text(
+    message = get_message_target(update)
+    await message.reply_text(
         settings_text(settings),
         reply_markup=settings_keyboard(settings),
     )

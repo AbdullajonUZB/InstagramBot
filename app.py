@@ -8,7 +8,7 @@ from telegram.ext import (
 from config import BOT_TOKEN
 from database.database import create_database
 from handlers.start import start
-from handlers.download import handle_message
+from handlers.download import handle_message, handle_youtube_choice
 from handlers.menu import menu
 from handlers.admin import (
     db,
@@ -48,6 +48,9 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_bonus_action, pattern=r"^admin_bonus:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_youtube_choice, pattern=r"^youtube_select:")
     )
     app.add_handler(
         MessageHandler(
