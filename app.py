@@ -19,9 +19,13 @@ from handlers.admin import (
 from handlers.settings import settings_callback
 from handlers.profile import profile_command
 from handlers.error import error_handler
+from handlers.video_tools import VideoToolsHandler
 from utils.logger import logger
 
 logger.info("Initializing Instagram Downloader...")
+
+video_tools_handler = VideoToolsHandler()
+
 
 def main():
     create_database()
@@ -53,6 +57,23 @@ def main():
         CallbackQueryHandler(handle_youtube_choice, pattern=r"^youtube_select:")
     )
     app.add_handler(
+        CallbackQueryHandler(video_tools_handler.handle_callback, pattern=r"^video_tools:")
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^🎵 Видео → MP3$"),
+            video_tools_handler.handle_main_menu,
+        ),
+        group=0,
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.VIDEO,
+            video_tools_handler.handle_video_message,
+        ),
+        group=0,
+    )
+    app.add_handler(
         MessageHandler(
             filters.Regex(
                 r"^(👤 Профиль|"
@@ -61,6 +82,7 @@ def main():
                 r"⚙ Настройки|⚙ Sozlamalar|⚙ Settings|"
                 r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
                 r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|📘 Facebook|"
+                r"🎵 Видео → MP3|"
                 r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
             ),
             menu,
@@ -78,6 +100,7 @@ def main():
                 r"⚙ Настройки|⚙ Sozlamalar|⚙ Settings|"
                 r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
                 r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|📘 Facebook|"
+                r"🎵 Видео → MP3|"
                 r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
             ),
             handle_message,

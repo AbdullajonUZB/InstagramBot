@@ -11,6 +11,9 @@ def main_menu(language="ru"):
             "👤 Профиль",
         ],
         [
+            "🎵 Видео → MP3",
+        ],
+        [
             translate(language, "history"),
             translate(language, "settings"),
         ],
