@@ -7,6 +7,7 @@ from pathlib import Path
 from yt_dlp import YoutubeDL
 
 from utils.i18n import t
+from utils.message_utils import get_message_target
 
 
 class BaseDownloader(ABC):
@@ -85,21 +86,22 @@ class BaseDownloader(ABC):
         empty_key="file_missing",
     ):
         file_path = self.resolve_downloaded_file(filename)
+        message = get_message_target(update)
         if not file_path or not file_path.exists():
-            await update.message.reply_text(t(update.effective_user.id, missing_key))
+            await message.reply_text(t(update.effective_user.id, missing_key))
             return None, missing_return
 
         try:
             self.validate_file(file_path, max_size=max_size)
         except FileNotFoundError:
-            await update.message.reply_text(t(update.effective_user.id, missing_key))
+            await message.reply_text(t(update.effective_user.id, missing_key))
             return None, missing_return
         except ValueError as error:
             if "exceeds maximum size" in str(error):
-                await update.message.reply_text(t(update.effective_user.id, too_large_key))
+                await message.reply_text(t(update.effective_user.id, too_large_key))
                 return None, too_large_return
             if "empty" in str(error):
-                await update.message.reply_text(t(update.effective_user.id, empty_key))
+                await message.reply_text(t(update.effective_user.id, empty_key))
                 return None, missing_return
             raise
 
@@ -112,7 +114,8 @@ class BaseDownloader(ABC):
             traceback.print_exc()
 
         self.logger.error("%s: %s", logger_message, error, exc_info=True)
-        await update.message.reply_text(t(update.effective_user.id, error_key))
+        message = get_message_target(update)
+        await message.reply_text(t(update.effective_user.id, error_key))
 
     def cleanup(self):
         if self.temp_dir and self.temp_dir.exists():

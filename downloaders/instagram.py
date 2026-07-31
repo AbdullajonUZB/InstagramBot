@@ -16,6 +16,7 @@ from database.database import (
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
+from utils.message_utils import get_message_target
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class InstagramDownloader(BaseDownloader):
 
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
+        message = get_message_target(update)
 
         register_user(
             user.id,
@@ -40,7 +42,7 @@ class InstagramDownloader(BaseDownloader):
                     [InlineKeyboardButton("🎁 Запросить дополнительные скачивания", callback_data="bonus_request")],
                 ]
             )
-            await update.message.reply_text(
+            await message.reply_text(
                 "🚫 Вы использовали все бесплатные скачивания на сегодня.\n\n"
                 "Следующий лимит будет доступен после наступления нового дня.\n\n"
                 "Вы можете:\n\n"
@@ -95,7 +97,7 @@ class InstagramDownloader(BaseDownloader):
 
             if extension in image_formats:
                 with open(file_path, "rb") as photo:
-                    await update.message.reply_photo(
+                    await message.reply_photo(
                         photo=photo,
                         caption=t(update.effective_user.id, "instagram_photo"),
                     )
@@ -106,7 +108,7 @@ class InstagramDownloader(BaseDownloader):
             if extension in video_formats:
                 size = file_path.stat().st_size
                 if size > MAX_FILE_SIZE:
-                    await update.message.reply_text(t(update.effective_user.id, "file_too_large"))
+                    await message.reply_text(t(update.effective_user.id, "file_too_large"))
                     return False
 
                 await send_video(
@@ -119,7 +121,7 @@ class InstagramDownloader(BaseDownloader):
                 return True
 
             with open(file_path, "rb") as document:
-                await update.message.reply_document(
+                await message.reply_document(
                     document=document,
                     caption=t(update.effective_user.id, "instagram_document"),
                 )

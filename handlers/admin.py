@@ -2,7 +2,7 @@ from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
-
+from utils.message_utils import get_message_target
 import sqlite3
 
 from config import ADMIN_ID
@@ -35,7 +35,8 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/db"
         )
 
-        await update.message.reply_text(
+        message = get_message_target(update)
+        await message.reply_text(
             translate(language, "access_denied")
         )
 
@@ -62,7 +63,8 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not rows:
 
-        await update.message.reply_text(
+        message = get_message_target(update)
+        await message.reply_text(
             translate(language, "admin_history_empty")
         )
 
@@ -81,7 +83,8 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🕒 {row[3]}\n\n"
         )
 
-    await update.message.reply_text(text)
+    message = get_message_target(update)
+    await message.reply_text(text)
 
 
 async def handle_premium_stub(update: Update, context: ContextTypes.DEFAULT_TYPE):

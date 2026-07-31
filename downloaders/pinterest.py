@@ -11,6 +11,7 @@ from database.database import add_history
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
+from utils.message_utils import get_message_target
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,10 @@ class PinterestDownloader(BaseDownloader):
 
             extension = os.path.splitext(str(file_path))[1].lower()
 
+            message = get_message_target(update)
             if extension in {".jpg", ".jpeg", ".png", ".webp"}:
                 with open(file_path, "rb") as photo:
-                    await update.message.reply_photo(
+                    await message.reply_photo(
                         photo=photo,
                         caption=t(update.effective_user.id, "pinterest_photo"),
                     )

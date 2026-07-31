@@ -1,9 +1,9 @@
 import asyncio
 import logging
-import os
-from pathlib import Path
+import subprocess
 
 from telegram import Update
+from telegram.error import TelegramError, TimedOut
 from telegram.ext import ContextTypes
 
 from config import MAX_FILE_SIZE
@@ -11,6 +11,7 @@ from database.database import add_history
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
+from utils.message_utils import get_message_target
 
 logger = logging.getLogger(__name__)
 
@@ -19,20 +20,43 @@ class YoutubeDownloader(BaseDownloader):
     def __init__(self, url: str, logger=None, temp_root=None):
         super().__init__(url=url, logger=logger, temp_root=temp_root)
 
-    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        self.prepare_temp_dir()
+    def _build_video_options(self):
+        return {
+            "format": "best[ext=mp4]/best",
+            "merge_output_format": "mp4",
+            "max_filesize": MAX_FILE_SIZE,
+        }
+
+    def _build_audio_options(self):
+        return {
+            "format": "bestaudio/best",
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "0",
+                }
+            ],
+            "quiet": True,
+            "no_warnings": True,
+        }
+
+    async def _download_video(self, update: Update):
+        message = get_message_target(update)
+        logger.info("[YouTube] 2/4 Downloading")
 
         try:
             filename = await asyncio.to_thread(
                 self.download_media,
                 "%(title)s.%(ext)s",
-                {
-                    "format": "best[ext=mp4]/best",
-                    "merge_output_format": "mp4",
-                    "max_filesize": MAX_FILE_SIZE,
-                },
+                self._build_video_options(),
             )
+        except Exception as error:
+            logger.exception("[YouTube] Download stage failed")
+            await message.reply_text("❌ Не удалось скачать видео.")
+            return False
 
+        try:
             file_path, validation_result = await self.resolve_validated_file(
                 update,
                 filename,
@@ -40,20 +64,109 @@ class YoutubeDownloader(BaseDownloader):
                 missing_return=False,
                 too_large_return=False,
             )
-            if validation_result is not None:
-                return validation_result
-            if file_path is None:
-                return False
-
-            await send_video(update, str(file_path), t(update.effective_user.id, "youtube_video"))
-
-            add_history(update.effective_user.id, self.url, "YouTube видео")
-            return True
-
         except Exception as error:
-            await self.handle_error(update, error, "youtube_error", "YouTube ERROR")
+            logger.exception("[YouTube] Validation stage failed")
+            await message.reply_text("❌ Не удалось скачать видео.")
             return False
 
+        if validation_result is not None:
+            return validation_result
+        if file_path is None:
+            return False
+
+        logger.info("[YouTube] 4/4 Uploading to Telegram")
+        try:
+            await send_video(update, str(file_path), t(update.effective_user.id, "youtube_video"))
+        except (TimedOut, TelegramError) as error:
+            logger.exception("[YouTube] Telegram send failed")
+            await message.reply_text("⚠️ Не удалось отправить видео в Telegram. Попробуйте ещё раз.")
+            return None
+        except Exception as error:
+            logger.exception("[YouTube] Telegram send failed")
+            await message.reply_text("⚠️ Не удалось отправить видео в Telegram. Попробуйте ещё раз.")
+            return None
+
+        add_history(update.effective_user.id, self.url, "YouTube видео")
+        logger.info("[YouTube] Successfully sent.")
+        return True
+
+    async def _download_audio(self, update: Update):
+        message = get_message_target(update)
+        logger.info("[YouTube] 2/4 Downloading")
+
+        try:
+            filename = await asyncio.to_thread(
+                self.download_media,
+                "%(title)s.%(ext)s",
+                self._build_audio_options(),
+            )
+        except Exception as error:
+            logger.exception("[YouTube] Download stage failed")
+            await message.reply_text("❌ Не удалось скачать аудио.")
+            return False
+
+        logger.info("[YouTube] 3/4 Converting to MP3")
+        try:
+            audio_file_path = self.resolve_downloaded_file(filename)
+            if audio_file_path is None or not audio_file_path.exists():
+                raise RuntimeError("download_failed")
+
+            if audio_file_path.suffix.lower() != ".mp3":
+                mp3_path = audio_file_path.with_suffix(".mp3")
+                completed = subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(audio_file_path), str(mp3_path)],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                if completed.returncode != 0:
+                    raise RuntimeError("conversion_failed")
+                audio_file_path = mp3_path
+
+            if not audio_file_path.exists():
+                raise RuntimeError("conversion_failed")
+        except RuntimeError as error:
+            logger.exception("[YouTube] Conversion stage failed")
+            await message.reply_text("❌ Не удалось обработать аудио в MP3.")
+            return False
+        except Exception as error:
+            logger.exception("[YouTube] Conversion stage failed")
+            await message.reply_text("❌ Не удалось обработать аудио в MP3.")
+            return False
+
+        logger.info("[YouTube] 4/4 Uploading to Telegram")
+        try:
+            with audio_file_path.open("rb") as audio_file:
+                await message.reply_audio(
+                    audio=audio_file,
+                    title=audio_file_path.stem,
+                    performer="YouTube",
+                    read_timeout=600,
+                    write_timeout=600,
+                    connect_timeout=60,
+                    pool_timeout=60,
+                )
+        except (TimedOut, TelegramError) as error:
+            logger.exception("[YouTube] Telegram send failed")
+            await message.reply_text("⚠️ Не удалось отправить аудио в Telegram. Попробуйте ещё раз.")
+            return None
+        except Exception as error:
+            logger.exception("[YouTube] Telegram send failed")
+            await message.reply_text("⚠️ Не удалось отправить аудио в Telegram. Попробуйте ещё раз.")
+            return None
+
+        add_history(update.effective_user.id, self.url, "YouTube аудио")
+        logger.info("[YouTube] Successfully sent.")
+        return True
+
+    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE, choice: str = "video"):
+        self.prepare_temp_dir()
+
+        try:
+            logger.info("[YouTube] 1/4 Detecting URL")
+            if choice == "audio":
+                return await self._download_audio(update)
+            return await self._download_video(update)
         finally:
             self.cleanup()
 
@@ -62,6 +175,7 @@ async def download_youtube(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     url: str,
+    choice: str = "video",
 ):
     downloader = YoutubeDownloader(url=url, logger=logger)
-    return await downloader.download(update, context)
+    return await downloader.download(update, context, choice=choice)

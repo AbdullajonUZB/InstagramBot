@@ -6,6 +6,7 @@ from database.database import (
     get_user_profile,
     get_user_total_downloads,
 )
+from utils.message_utils import get_message_target
 
 
 async def profile_command(
@@ -15,7 +16,8 @@ async def profile_command(
     profile = get_user_profile(update.effective_user.id)
 
     if profile is None:
-        await update.message.reply_text(
+        message = get_message_target(update)
+        await message.reply_text(
             "❌ Профиль не найден."
         )
         return
@@ -64,7 +66,8 @@ async def profile_command(
         ["⬅️ Назад"],
     ]
 
-    await update.message.reply_text(
+    message = get_message_target(update)
+    await message.reply_text(
         text,
         parse_mode="HTML",
         reply_markup=ReplyKeyboardMarkup(
