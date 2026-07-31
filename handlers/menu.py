@@ -1,6 +1,3 @@
-from multiprocessing import context
-from pydoc import text
-from turtle import update
 from telegram import Update
 from telegram.ext import ContextTypes
 from database.database import get_history, get_user_settings
@@ -68,13 +65,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text(translate(language, "history_empty"))
             return
 
-        message = translate(language, "history_title")
+        history_text = translate(language, "history_title")
         for index, item in enumerate(history, start=1):
             file_type, url, created_at = item
-            message += f"{index}. {file_type}\n📅 {created_at}\n🔗 {url}\n\n"
+            history_text += f"{index}. {file_type}\n📅 {created_at}\n🔗 {url}\n\n"
 
-        await message.reply_text(message)
-
+        await message.reply_text(history_text)
     elif action == "settings":
         await show_settings(update, context)
 
