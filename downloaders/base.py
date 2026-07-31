@@ -1,14 +1,12 @@
 import logging
 import shutil
+import os
 import tempfile
 from abc import ABC
 from pathlib import Path
-
 from yt_dlp import YoutubeDL
-
 from utils.i18n import t
 from utils.message_utils import get_message_target
-
 
 class BaseDownloader(ABC):
     def __init__(self, url, logger=None, temp_root=None):
@@ -33,6 +31,18 @@ class BaseDownloader(ABC):
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
+        }
+        ytdlp_opts = {
+            "outtmpl": str(output_path),
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "ffmpeg_location": os.path.join(
+                os.environ["LOCALAPPDATA"],
+                "Microsoft",
+                "WinGet",
+                "Links"
+            ),
         }
         if ytdlp_options:
             ytdlp_opts.update(ytdlp_options)
