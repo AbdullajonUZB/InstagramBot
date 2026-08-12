@@ -21,7 +21,7 @@ class BaseDownloader(ABC):
         self.logger.debug("Created temporary directory %s", self.temp_dir)
         return self.temp_dir
 
-    def download_media(self, output_template="%(title)s.%(ext)s", ytdlp_options=None):
+    def download_media(self, output_template="media_%(id)s.%(ext)s", ytdlp_options=None):
         if self.temp_dir is None:
             self.prepare_temp_dir()
 

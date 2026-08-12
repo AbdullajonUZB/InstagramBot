@@ -30,7 +30,7 @@ class FacebookDownloader(BaseDownloader):
             logger.debug("Starting Facebook download")
             filename = await asyncio.to_thread(
                 self.download_media,
-                "%(title)s.%(ext)s",
+                "facebook_%(id)s.%(ext)s",
                 {"max_filesize": MAX_FILE_SIZE},
             )
             logger.debug("Downloaded Facebook file path: %s", filename)
