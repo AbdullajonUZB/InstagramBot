@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 DB_NAME = str(Path(__file__).resolve().parent / "history.db")
 
-FREE_DAILY_LIMIT = 10
+FREE_DAILY_LIMIT = 20
 
 
 def connect():
@@ -104,6 +104,16 @@ def create_database():
                 bonus_downloads INTEGER NOT NULL DEFAULT 0,
                 approved_by INTEGER,
                 approved_at TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback(
+                user_id INTEGER PRIMARY KEY,
+                rating INTEGER NOT NULL,
+                comment TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -383,6 +393,27 @@ def get_user_total_downloads(telegram_id: int):
     return int(count or 0)
 
 
+def has_feedback(user_id: int):
+    with connect() as conn:
+        return conn.execute("SELECT 1 FROM feedback WHERE user_id = ?", (user_id,)).fetchone() is not None
+
+
+def save_feedback_rating(user_id: int, rating: int):
+    with connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO feedback(user_id, rating) VALUES (?, ?)",
+            (user_id, rating),
+        )
+
+
+def save_feedback_comment(user_id: int, comment: str):
+    with connect() as conn:
+        conn.execute(
+            "UPDATE feedback SET comment = ? WHERE user_id = ?",
+            (comment, user_id),
+        )
+
+
 def create_bonus_download_request(user_id, username, first_name):
     today = date.today().isoformat()
 
@@ -524,3 +555,26 @@ def get_user_profile(telegram_id: int):
         profile = cursor.fetchone()
 
     return profile
+
+
+def get_admin_stats():
+    today = date.today().isoformat()
+    with connect() as conn:
+        users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        downloads_today = conn.execute(
+            "SELECT COALESCE(SUM(downloads_today), 0) FROM users"
+        ).fetchone()[0]
+        history_today = conn.execute(
+            "SELECT COUNT(*) FROM history WHERE date(created_at) = ?",
+            (today,),
+        ).fetchone()[0]
+        premium_users = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE is_premium = 1"
+        ).fetchone()[0]
+
+    return {
+        "users": int(users or 0),
+        "downloads_today": int(downloads_today or 0),
+        "history_today": int(history_today or 0),
+        "premium_users": int(premium_users or 0),
+    }

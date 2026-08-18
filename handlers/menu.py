@@ -2,14 +2,15 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database.database import get_history, get_user_settings
 from handlers.settings import show_settings
-from keyboards.main_menu import main_menu, service_menu
+from keyboards.main_menu import main_menu
 from utils.i18n import translate
 from handlers.profile import profile_command
 from services import SERVICES
 from utils.message_utils import get_message_target
+from utils.telegram_retry import reply_text_with_retry
 
 
-def get_action(text):
+def get_action(text: str) -> str | None:
     for language in ("ru", "uz", "en"):
         for action in ("download", "history", "settings", "help", "back"):
             if text == translate(language, action):
@@ -18,7 +19,12 @@ def get_action(text):
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = get_message_target(update)
+    if message is None:
+        return
+
     text = getattr(message, "text", None)
+    if not isinstance(text, str):
+        return
     user_id = update.effective_user.id
     settings = get_user_settings(user_id)
     language = settings["language"]
@@ -26,10 +32,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == "download":
         context.user_data.pop("selected_service", None)
-        await message.reply_text(
-            translate(language, "choose_service"),
-            reply_markup=service_menu(language),
+        prompt = await reply_text_with_retry(
+            message,
+            "🔗 Отправьте ссылку на видео или публикацию.",
+            reply_markup=main_menu(language),
         )
+        context.user_data["download_prompt_message_id"] = prompt.message_id
 
     elif text in [service["button"] for service in SERVICES.values()]:
 
@@ -41,7 +49,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 print("selected_service =", key)
 
-                await message.reply_text(
+                await reply_text_with_retry(
+                    message,
                     translate(
                         language,
                         "send_service_link",
@@ -53,7 +62,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif action == "back":
         context.user_data.pop("selected_service", None)
-        await message.reply_text(
+        await reply_text_with_retry(
+            message,
             translate(language, "main_menu"),
             reply_markup=main_menu(language),
         )
@@ -62,7 +72,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = get_history(user_id)
 
         if not history:
-            await message.reply_text(translate(language, "history_empty"))
+            await reply_text_with_retry(message, translate(language, "history_empty"))
             return
 
         history_text = translate(language, "history_title")
@@ -70,11 +80,11 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_type, url, created_at = item
             history_text += f"{index}. {file_type}\n📅 {created_at}\n🔗 {url}\n\n"
 
-        await message.reply_text(history_text)
+        await reply_text_with_retry(message, history_text)
     elif action == "settings":
         await show_settings(update, context)
 
     elif action == "help":
-        await message.reply_text(translate(language, "help_text"))
+        await reply_text_with_retry(message, translate(language, "help_text"))
     elif text == "👤 Профиль":
         await profile_command(update, context)

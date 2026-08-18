@@ -1,62 +1,100 @@
 import asyncio
 import logging
 import os
+import re
+import shutil
+import subprocess
+from urllib.parse import urlsplit
 from pathlib import Path
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import MAX_FILE_SIZE
 from database.database import (
     add_history,
-    can_download,
     increase_download_count,
-    register_user,
 )
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
 from utils.message_utils import get_message_target
+from utils.download_limits import ensure_download_allowed
+from utils.followup_media import remember_video_for_mp3
 
 logger = logging.getLogger(__name__)
+
+
+def is_instagram_story_url(url: str) -> bool:
+    return bool(re.search(r"/stories/(?:highlights/)?[^/?#]+", url, re.IGNORECASE))
+
+
+def normalize_instagram_reel_url(url: str) -> str:
+    """Canonicalize Reel links and discard Instagram query parameters."""
+    parsed = urlsplit(url.strip())
+    match = re.search(r"/(?:reel|reels)/([^/?#]+)/?", parsed.path, re.IGNORECASE)
+    if not match:
+        return url
+    return f"https://www.instagram.com/reels/{match.group(1)}/"
 
 
 class InstagramDownloader(BaseDownloader):
     def __init__(self, url: str, logger=None, temp_root=None):
         super().__init__(url=url, logger=logger, temp_root=temp_root)
 
-    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        message = get_message_target(update)
+    async def _ensure_telegram_compatible_video(self, file_path: Path) -> Path:
+        """Transcode only non-H.264 video streams to Telegram-safe MP4."""
+        ffprobe = shutil.which("ffprobe") or shutil.which("ffprobe.exe")
+        ffmpeg = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
+        if not ffprobe or not ffmpeg:
+            logger.warning("ffprobe/ffmpeg not available; keeping downloaded video")
+            return file_path
 
-        register_user(
-            user.id,
-            user.username,
-            user.first_name,
+        probe = await asyncio.to_thread(
+            subprocess.run,
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1",
+             str(file_path)],
+            capture_output=True,
+            text=True,
+            check=False,
         )
+        codec = probe.stdout.strip().lower()
+        if codec in {"h264", "avc1"}:
+            logger.info("Instagram video codec is already H.264; skipping transcode")
+            return file_path
 
-        if not can_download(user.id):
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton("⭐ Купить Premium", callback_data="premium_stub")],
-                    [InlineKeyboardButton("🎁 Запросить дополнительные скачивания", callback_data="bonus_request")],
-                ]
-            )
-            await message.reply_text(
-                "🚫 Вы использовали все бесплатные скачивания на сегодня.\n\n"
-                "Следующий лимит будет доступен после наступления нового дня.\n\n"
-                "Вы можете:\n\n"
-                "⭐ Купить Premium\n"
-                "🎁 Запросить дополнительные скачивания",
-                reply_markup=keyboard,
-            )
-            return True
+        output_path = file_path.with_name(f"{file_path.stem}_telegram.mp4")
+        logger.info("Transcoding Instagram video from %s to H.264/AAC", codec or "unknown")
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [ffmpeg, "-y", "-i", str(file_path), "-c:v", "libx264",
+             "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac",
+             "-movflags", "+faststart", str(output_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0 or not output_path.exists():
+            raise RuntimeError("Instagram video transcoding failed")
+        file_path.unlink(missing_ok=True)
+        return output_path
+
+    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message = get_message_target(update)
+        is_story = is_instagram_story_url(self.url)
+
+        if not await ensure_download_allowed(update):
+            return None
 
         self.prepare_temp_dir()
 
         ydl_opts = {
             "cookiefile": "cookies.txt",
             "noplaylist": True,
+            # Prefer Telegram-compatible H.264/MP4 + AAC/M4A. The fallbacks
+            # still require a video-capable format and never request audio-only.
+            "format": "bv*[ext=mp4][vcodec^=avc]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
             "merge_output_format": "mp4",
             "retries": 10,
             "fragment_retries": 10,
@@ -99,13 +137,22 @@ class InstagramDownloader(BaseDownloader):
                 with open(file_path, "rb") as photo:
                     await message.reply_photo(
                         photo=photo,
-                        caption=t(update.effective_user.id, "instagram_photo"),
+                        caption=t(
+                            update.effective_user.id,
+                            "instagram_story_photo" if is_story else "instagram_photo",
+                        ),
                     )
-                add_history(update.effective_user.id, self.url, "Фото")
+                add_history(
+                    update.effective_user.id,
+                    self.url,
+                    "Instagram Story фото" if is_story else "Фото",
+                )
                 increase_download_count(update.effective_user.id)
                 return True
 
             if extension in video_formats:
+                remember_video_for_mp3(context, file_path)
+                file_path = await self._ensure_telegram_compatible_video(file_path)
                 size = file_path.stat().st_size
                 if size > MAX_FILE_SIZE:
                     await message.reply_text(t(update.effective_user.id, "file_too_large"))
@@ -114,9 +161,16 @@ class InstagramDownloader(BaseDownloader):
                 await send_video(
                     update,
                     str(file_path),
-                    t(update.effective_user.id, "instagram_video"),
+                    t(
+                        update.effective_user.id,
+                        "instagram_story_video" if is_story else "instagram_video",
+                    ),
                 )
-                add_history(update.effective_user.id, self.url, "Видео")
+                add_history(
+                    update.effective_user.id,
+                    self.url,
+                    "Instagram Story видео" if is_story else "Видео",
+                )
                 increase_download_count(update.effective_user.id)
                 return True
 
@@ -130,6 +184,13 @@ class InstagramDownloader(BaseDownloader):
             return True
 
         except Exception as error:
+            error_text = str(error).lower()
+            if is_story and ("login" in error_text or "cookies" in error_text):
+                logger.warning("Instagram Story requires an authenticated session: %s", error)
+                await message.reply_text(
+                    t(update.effective_user.id, "instagram_story_login_required")
+                )
+                return False
             await self.handle_error(update, error, "instagram_error", "Instagram ERROR")
             return False
 
@@ -142,5 +203,5 @@ async def download_instagram(
     context: ContextTypes.DEFAULT_TYPE,
     url: str,
 ):
-    downloader = InstagramDownloader(url=url, logger=logger)
+    downloader = InstagramDownloader(url=normalize_instagram_reel_url(url), logger=logger)
     return await downloader.download(update, context)

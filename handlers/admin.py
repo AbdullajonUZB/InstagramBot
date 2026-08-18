@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
+from telegram.ext import ApplicationHandlerStop, ContextTypes
 from utils.message_utils import get_message_target
 import sqlite3
 
@@ -17,6 +17,7 @@ from database.database import (
     get_user_total_downloads,
     has_active_bonus_request,
     FREE_DAILY_LIMIT,
+    get_admin_stats,
 )
 from utils.i18n import translate
 
@@ -85,6 +86,72 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = get_message_target(update)
     await message.reply_text(text)
+
+
+async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    stats = get_admin_stats()
+    await update.effective_message.reply_text(
+        "📊 Статус бота\n\n"
+        f"👥 Пользователей: {stats['users']}\n"
+        f"📥 Скачиваний сегодня: {stats['downloads_today']}\n"
+        f"🗂 Записей истории сегодня: {stats['history_today']}\n"
+        f"👑 Premium пользователей: {stats['premium_users']}"
+    )
+
+
+async def handle_admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query is None or update.effective_user.id != ADMIN_ID:
+        return
+
+    await query.answer()
+    try:
+        user_id = int(query.data.split(":", 1)[1])
+    except (AttributeError, ValueError, IndexError):
+        await query.message.reply_text("❌ Некорректный получатель.")
+        return
+
+    context.user_data["admin_reply_to"] = user_id
+    await query.message.reply_text(
+        f"✍️ Напишите ответ пользователю {user_id}.\n"
+        "Для отмены используйте /cancel_reply."
+    )
+
+
+async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    user_id = context.user_data.get("admin_reply_to")
+    if not user_id or not update.effective_message:
+        return
+
+    text = update.effective_message.text
+    if not text:
+        return
+
+    try:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"📩 Ответ администратора:\n\n{text}",
+        )
+        await update.effective_message.reply_text("✅ Ответ отправлен пользователю.")
+    except Exception as error:
+        await update.effective_message.reply_text(f"❌ Не удалось отправить ответ: {error}")
+    finally:
+        context.user_data.pop("admin_reply_to", None)
+
+    raise ApplicationHandlerStop
+
+
+async def cancel_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+    context.user_data.pop("admin_reply_to", None)
+    await update.effective_message.reply_text("✅ Ответ отменён.")
 
 
 async def handle_premium_stub(update: Update, context: ContextTypes.DEFAULT_TYPE):

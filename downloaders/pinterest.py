@@ -12,6 +12,7 @@ from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
 from utils.message_utils import get_message_target
+from utils.followup_media import remember_video_for_mp3
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class PinterestDownloader(BaseDownloader):
                     )
                 media_type = "Pinterest фото"
             else:
+                remember_video_for_mp3(context, file_path)
                 await send_video(update, str(file_path), t(update.effective_user.id, "pinterest_video"))
                 media_type = "Pinterest видео"
 

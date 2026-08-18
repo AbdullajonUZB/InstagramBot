@@ -32,18 +32,11 @@ class BaseDownloader(ABC):
             "quiet": True,
             "no_warnings": True,
         }
-        ytdlp_opts = {
-            "outtmpl": str(output_path),
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "ffmpeg_location": os.path.join(
-                os.environ["LOCALAPPDATA"],
-                "Microsoft",
-                "WinGet",
-                "Links"
-            ),
-        }
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            ytdlp_opts["ffmpeg_location"] = os.path.join(
+                local_app_data, "Microsoft", "WinGet", "Links"
+            )
         if ytdlp_options:
             ytdlp_opts.update(ytdlp_options)
 

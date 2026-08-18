@@ -1,5 +1,4 @@
 import asyncio
-from email.mime import message
 import os
 import shutil
 import subprocess
@@ -12,34 +11,29 @@ from telegram.ext import ContextTypes
 
 from utils.logger import logger
 from utils.message_utils import get_message_target
+from utils.user_locks import get_user_lock
 
 
 class VideoToolsHandler:
     MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024
 
     def __init__(self):
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        winget_dir = (
+            os.path.join(local_app_data, "Microsoft", "WinGet", "Links")
+            if local_app_data
+            else None
+        )
         self.ffmpeg_path = (
             shutil.which("ffmpeg")
             or shutil.which("ffmpeg.exe")
-            or os.path.join(
-                os.environ["LOCALAPPDATA"],
-                "Microsoft",
-                "WinGet",
-                "Links",
-                "ffmpeg.exe"
-            )
+            or (os.path.join(winget_dir, "ffmpeg.exe") if winget_dir else None)
         )
 
         self.ffprobe_path = (
             shutil.which("ffprobe")
             or shutil.which("ffprobe.exe")
-            or os.path.join(
-                os.environ["LOCALAPPDATA"],
-                "Microsoft",
-                "WinGet",
-                "Links",
-                "ffprobe.exe"
-            )
+            or (os.path.join(winget_dir, "ffprobe.exe") if winget_dir else None)
         )
         print("FFmpeg:", self.ffmpeg_path)
         print("FFprobe:", self.ffprobe_path)
@@ -58,8 +52,16 @@ class VideoToolsHandler:
 
         message = update.message
         if message is None or message.video is None:
-            await message.reply_text("📤 Отправьте видеофайл")
+            target = get_message_target(update)
+            if target is not None:
+                await target.reply_text("📤 Отправьте видеофайл")
             return
+
+        lock = await get_user_lock(context, update.effective_user.id)
+        async with lock:
+            await self._handle_video_message_locked(update, context, message)
+
+    async def _handle_video_message_locked(self, update, context, message):
 
         video = message.video
         print("FILE SIZE =", video.file_size)
@@ -158,17 +160,19 @@ class VideoToolsHandler:
             await query.message.reply_text("⚠️ Видео не найдено. Отправьте его заново.")
             return
 
-        try:
-            if action == "extract_mp3":
-                await self._extract_mp3(query.message, input_path, context)
-            elif action == "extract_frame":
-                await self._extract_frame(query.message, input_path, context)
-            elif action == "compress_video":
-                await self._compress_video(query.message, input_path, context)
-            else:
-                await query.message.reply_text("⚠️ Неизвестное действие.")
-        except Exception as exc:
-            await query.message.reply_text(f"❌ Ошибка: {exc}")
+        lock = await get_user_lock(context, update.effective_user.id)
+        async with lock:
+            try:
+                if action == "extract_mp3":
+                    await self._extract_mp3(query.message, input_path, context)
+                elif action == "extract_frame":
+                    await self._extract_frame(query.message, input_path, context)
+                elif action == "compress_video":
+                    await self._compress_video(query.message, input_path, context)
+                else:
+                    await query.message.reply_text("⚠️ Неизвестное действие.")
+            except Exception as exc:
+                await query.message.reply_text(f"❌ Ошибка: {exc}")
 
     async def _extract_mp3(self, message, input_path: Path, context: ContextTypes.DEFAULT_TYPE):
         if not self.ffmpeg_path:
@@ -198,7 +202,7 @@ class VideoToolsHandler:
         if not self.ffmpeg_path or not self.ffprobe_path:
             raise RuntimeError("ffmpeg или ffprobe не найден в системе")
 
-        duration = self._get_duration(input_path)
+        duration = await self._get_duration(input_path)
         position = duration / 2 if duration else 1.0
         output_path = Path(context.user_data["video_tools_temp_dir"]) / "frame.jpg"
 
@@ -261,7 +265,7 @@ class VideoToolsHandler:
             error_text = (result.stderr or result.stdout or "ffmpeg failed").strip()
             raise RuntimeError(error_text[:1000])
 
-    def _get_duration(self, input_path: Path):
+    async def _get_duration(self, input_path: Path):
         if not self.ffprobe_path:
             return None
 
@@ -276,7 +280,13 @@ class VideoToolsHandler:
             str(input_path),
         ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            result = await asyncio.to_thread(
+                subprocess.run,
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
         except OSError:
             return None
 

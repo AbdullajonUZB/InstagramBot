@@ -8,11 +8,13 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import MAX_FILE_SIZE
-from database.database import add_history
+from database.database import add_history, increase_download_count
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
 from utils.message_utils import get_message_target
+from utils.download_limits import ensure_download_allowed
+from utils.followup_media import remember_video_for_mp3
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,9 @@ class FacebookDownloader(BaseDownloader):
 
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.debug("Facebook downloader started")
+
+        if not await ensure_download_allowed(update):
+            return None
 
         self.prepare_temp_dir()
 
@@ -58,6 +63,7 @@ class FacebookDownloader(BaseDownloader):
                     )
                 media_type = "Facebook фото"
             else:
+                remember_video_for_mp3(context, file_path)
                 await send_video(
                     update,
                     str(file_path),
@@ -66,6 +72,7 @@ class FacebookDownloader(BaseDownloader):
                 media_type = "Facebook видео"
 
             add_history(update.effective_user.id, self.url, media_type)
+            increase_download_count(update.effective_user.id)
             logger.debug("Facebook download completed")
             return True
 

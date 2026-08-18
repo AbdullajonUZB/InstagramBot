@@ -11,6 +11,7 @@ from database.database import add_history
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
+from utils.followup_media import remember_video_for_mp3
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class TikTokDownloader(BaseDownloader):
             if file_path is None:
                 return False
 
+            remember_video_for_mp3(context, file_path)
             await send_video(update, str(file_path), t(update.effective_user.id, "tiktok_video"))
 
             add_history(update.effective_user.id, self.url, "TikTok видео")
