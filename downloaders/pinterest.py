@@ -11,7 +11,7 @@ from database.database import add_history
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 from utils.followup_media import remember_video_for_mp3
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,8 @@ class PinterestDownloader(BaseDownloader):
         super().__init__(url=url, logger=logger, temp_root=temp_root)
 
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = require_effective_user(update)
+        message = require_message_target(update)
         self.prepare_temp_dir()
 
         try:
@@ -47,20 +49,19 @@ class PinterestDownloader(BaseDownloader):
 
             extension = os.path.splitext(str(file_path))[1].lower()
 
-            message = get_message_target(update)
             if extension in {".jpg", ".jpeg", ".png", ".webp"}:
                 with open(file_path, "rb") as photo:
                     await message.reply_photo(
                         photo=photo,
-                        caption=t(update.effective_user.id, "pinterest_photo"),
+                        caption=t(user.id, "pinterest_photo"),
                     )
                 media_type = "Pinterest фото"
             else:
                 remember_video_for_mp3(context, file_path)
-                await send_video(update, str(file_path), t(update.effective_user.id, "pinterest_video"))
+                await send_video(update, str(file_path), t(user.id, "pinterest_video"))
                 media_type = "Pinterest видео"
 
-            add_history(update.effective_user.id, self.url, media_type)
+            add_history(user.id, self.url, media_type)
             return True
 
         except Exception as error:

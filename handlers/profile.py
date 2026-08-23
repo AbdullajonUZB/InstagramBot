@@ -6,17 +6,18 @@ from database.database import (
     get_user_profile,
     get_user_total_downloads,
 )
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 
 
 async def profile_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-    profile = get_user_profile(update.effective_user.id)
+    user_id = require_effective_user(update).id
+    message = require_message_target(update)
+    profile = get_user_profile(user_id)
 
     if profile is None:
-        message = get_message_target(update)
         await message.reply_text(
             "❌ Профиль не найден."
         )
@@ -30,7 +31,7 @@ async def profile_command(
         registered_at = None
         bonus_downloads_total = 0
 
-    total_downloads = get_user_total_downloads(update.effective_user.id)
+    total_downloads = get_user_total_downloads(user_id)
 
     if is_premium:
         status = "👑 Premium"
@@ -41,7 +42,7 @@ async def profile_command(
 
     text = (
         f"👤 <b>Ваш профиль</b>\n\n"
-        f"🆔 <code>{update.effective_user.id}</code>\n"
+        f"🆔 <code>{user_id}</code>\n"
         f"👤 Имя: {first_name}\n"
         f"📛 Username: @{username if username else '-'}\n\n"
         f"⭐ Статус: {status}\n"
@@ -66,7 +67,6 @@ async def profile_command(
         ["⬅️ Назад"],
     ]
 
-    message = get_message_target(update)
     await message.reply_text(
         text,
         parse_mode="HTML",

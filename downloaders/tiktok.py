@@ -12,6 +12,7 @@ from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
 from utils.followup_media import remember_video_for_mp3
+from utils.message_utils import require_effective_user
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class TikTokDownloader(BaseDownloader):
         super().__init__(url=url, logger=logger, temp_root=temp_root)
 
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = require_effective_user(update)
         self.prepare_temp_dir()
 
         try:
@@ -46,9 +48,9 @@ class TikTokDownloader(BaseDownloader):
                 return False
 
             remember_video_for_mp3(context, file_path)
-            await send_video(update, str(file_path), t(update.effective_user.id, "tiktok_video"))
+            await send_video(update, str(file_path), t(user.id, "tiktok_video"))
 
-            add_history(update.effective_user.id, self.url, "TikTok видео")
+            add_history(user.id, self.url, "TikTok видео")
             return True
 
         except Exception as error:

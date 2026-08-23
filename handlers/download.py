@@ -13,7 +13,7 @@ from keyboards.navigation import back_to_main_menu_keyboard
 from database.database import get_user_settings
 from utils.i18n import translate
 from services import SERVICES, extract_service_link
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 from utils.user_locks import get_user_lock
 from utils.followup_media import clear_followup_media
 from utils.media_converter import convert_video_to_mp3
@@ -36,7 +36,7 @@ def download_actions_keyboard(can_convert=False):
 
 async def delete_download_prompt(update, context):
     message_id = context.user_data.pop("download_prompt_message_id", None)
-    message = get_message_target(update)
+    message = require_message_target(update)
     if message_id is None or message is None:
         return
 
@@ -46,12 +46,13 @@ async def delete_download_prompt(update, context):
         pass
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = get_message_target(update)
-    if not message or not getattr(message, "text", None):
+    message = require_message_target(update)
+    if not message.text:
         return
 
     text = message.text.strip()
-    lock = await get_user_lock(context, update.effective_user.id)
+    user = require_effective_user(update)
+    lock = await get_user_lock(context, user.id)
     async with lock:
         await _handle_message_locked(update, context, message, text)
 
@@ -59,7 +60,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _handle_message_locked(update, context, message, text):
     if await handle_feedback_comment(update, context):
         return
-    language = get_user_settings(update.effective_user.id)["language"]
+    language = get_user_settings(require_effective_user(update).id)["language"]
 
     selected_service = context.user_data.get("selected_service")
     detected_service, detected_url = extract_service_link(text)
@@ -71,7 +72,6 @@ async def _handle_message_locked(update, context, message, text):
             await notify_admin_user_message(context, update, text)
         except Exception:
             pass
-        message = get_message_target(update)
         await message.reply_text(
             translate(language, "choose_first"),
             reply_markup=service_menu(language),
@@ -92,7 +92,6 @@ async def _handle_message_locked(update, context, message, text):
                 await notify_admin_user_message(context, update, text)
             except Exception:
                 pass
-            message = get_message_target(update)
             await message.reply_text(
                 translate(language, "wrong_service_link", service=service_name)
             )
@@ -100,7 +99,6 @@ async def _handle_message_locked(update, context, message, text):
         url = match.group(1).rstrip(".,!?;:)]}")
 
     if not url:
-        message = get_message_target(update)
         await message.reply_text(
             translate(language, "wrong_service_link", service=service_name)
         )
@@ -116,14 +114,12 @@ async def _handle_message_locked(update, context, message, text):
                 ]
             ]
         )
-        message = get_message_target(update)
         await message.reply_text(
             "🎬 Что вы хотите скачать?",
             reply_markup=keyboard,
         )
         return
 
-    message = get_message_target(update)
     clear_followup_media(context)
     status_message = await message.reply_text(
         translate(language, "downloading")
@@ -156,22 +152,25 @@ async def _handle_message_locked(update, context, message, text):
 
 async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if query is None or not query.message:
+        return
+    message = require_message_target(update)
     await query.answer()
 
     if not query.data:
         return
 
     choice = query.data.split(":", 1)[1]
-    lock = await get_user_lock(context, update.effective_user.id)
+    lock = await get_user_lock(context, require_effective_user(update).id)
     async with lock:
         pending_url = context.user_data.get("pending_youtube_url")
         if not pending_url:
-            await query.message.reply_text("⚠️ Ссылка для YouTube была потеряна. Попробуйте отправить её ещё раз.")
+            await message.reply_text("⚠️ Ссылка для YouTube была потеряна. Попробуйте отправить её ещё раз.")
             return
 
         context.user_data.pop("pending_youtube_url", None)
         clear_followup_media(context)
-        status_message = await query.message.reply_text("⏳ Скачивание началось...")
+        status_message = await message.reply_text("⏳ Скачивание началось...")
 
         try:
             success = await downloaders.youtube.download_youtube(
@@ -190,10 +189,10 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
             # YouTube downloader already sent the specific error message.
             pass
         elif success is None:
-            await query.message.reply_text("⚠️ Не удалось отправить файл в Telegram. Попробуйте ещё раз.")
+            await message.reply_text("⚠️ Не удалось отправить файл в Telegram. Попробуйте ещё раз.")
         elif success is True:
             await delete_download_prompt(update, context)
-            await query.message.reply_text(
+            await message.reply_text(
                 "✅ Готово. Что сделать дальше?",
                 reply_markup=download_actions_keyboard(
                     bool(context.user_data.get("followup_media_path"))
@@ -206,6 +205,7 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     if query is None or not query.data:
         return
+    message = require_message_target(update)
 
     await query.answer()
     action = query.data.split(":", 1)[1]
@@ -214,7 +214,7 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
         input_path = context.user_data.get("followup_media_path")
         media_dir = context.user_data.get("followup_media_dir")
         if not input_path or not Path(input_path).exists():
-            await query.message.reply_text("⚠️ Видео для конвертации больше недоступно. Отправьте ссылку заново.")
+            await message.reply_text("⚠️ Видео для конвертации больше недоступно. Отправьте ссылку заново.")
             clear_followup_media(context)
             return
 
@@ -222,7 +222,7 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
         try:
             await convert_video_to_mp3(Path(input_path), output_path)
             with output_path.open("rb") as audio:
-                await query.message.reply_audio(
+                await message.reply_audio(
                     audio=audio,
                     filename="audio.mp3",
                     title="audio",
@@ -234,15 +234,15 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
             clear_followup_media(context)
             await query.edit_message_text("✅ MP3 готов.", reply_markup=None)
         except Exception as exc:
-            await query.message.reply_text(f"❌ Не удалось создать MP3: {exc}")
+            await message.reply_text(f"❌ Не удалось создать MP3: {exc}")
     elif action == "again":
-        prompt = await query.message.reply_text(
+        prompt = await message.reply_text(
             "🔗 Отправьте ссылку на видео или публикацию."
         )
         context.user_data["download_prompt_message_id"] = prompt.message_id
     elif action == "close":
         clear_followup_media(context)
-        await query.message.delete()
+        await message.delete()
         from handlers.start import start
 
         await start(update, context)

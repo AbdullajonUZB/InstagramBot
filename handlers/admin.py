@@ -1,8 +1,9 @@
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import ApplicationHandlerStop, ContextTypes
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 import sqlite3
 
 from config import ADMIN_ID
@@ -18,25 +19,29 @@ from database.database import (
     has_active_bonus_request,
     FREE_DAILY_LIMIT,
     get_admin_stats,
+    ban_user,
+    get_banned_users,
+    unban_user,
 )
 from utils.i18n import translate
 
 
 async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    language = get_user_settings(update.effective_user.id)["language"]
+    user = require_effective_user(update)
+    language = get_user_settings(user.id)["language"]
 
-    if update.effective_user.id != ADMIN_ID:
+    if user.id != ADMIN_ID:
 
         add_security_log(
-            update.effective_user.id,
-            update.effective_user.username,
-            update.effective_user.first_name,
+            user.id,
+            user.username,
+            user.first_name,
             "ACCESS_DENIED",
             "/db"
         )
 
-        message = get_message_target(update)
+        message = require_message_target(update)
         await message.reply_text(
             translate(language, "access_denied")
         )
@@ -64,7 +69,7 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not rows:
 
-        message = get_message_target(update)
+        message = require_message_target(update)
         await message.reply_text(
             translate(language, "admin_history_empty")
         )
@@ -84,16 +89,16 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🕒 {row[3]}\n\n"
         )
 
-    message = get_message_target(update)
+    message = require_message_target(update)
     await message.reply_text(text)
 
 
 async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if require_effective_user(update).id != ADMIN_ID:
         return
 
     stats = get_admin_stats()
-    await update.effective_message.reply_text(
+    await require_message_target(update).reply_text(
         "📊 Статус бота\n\n"
         f"👥 Пользователей: {stats['users']}\n"
         f"📥 Скачиваний сегодня: {stats['downloads_today']}\n"
@@ -102,9 +107,100 @@ async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+def admin_panel_keyboard():
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("📊 Статистика", callback_data="admin_panel:status"),
+                InlineKeyboardButton("🚫 Баны", callback_data="admin_panel:banned"),
+            ],
+            [InlineKeyboardButton("🔄 Обновить", callback_data="admin_panel:refresh")],
+        ]
+    )
+
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if require_effective_user(update).id != ADMIN_ID:
+        return
+    await require_message_target(update).reply_text(
+        "🛠 Админская панель\n\nВыберите действие:",
+        reply_markup=admin_panel_keyboard(),
+    )
+
+
+async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query is None or query.message is None or require_effective_user(update).id != ADMIN_ID:
+        return
+    await query.answer()
+    action = query.data.split(":", 1)[1]
+
+    if action in {"status", "refresh"}:
+        stats = get_admin_stats()
+        text = (
+            "🛠 Админская панель\n\n"
+            f"👥 Пользователей: {stats['users']}\n"
+            f"📥 Скачиваний сегодня: {stats['downloads_today']}\n"
+            f"🗂 Истории сегодня: {stats['history_today']}\n"
+            f"👑 Premium: {stats['premium_users']}"
+        )
+        try:
+            await query.edit_message_text(text, reply_markup=admin_panel_keyboard())
+        except BadRequest as error:
+            if "message is not modified" not in str(error).lower():
+                raise
+    elif action == "banned":
+        banned = get_banned_users()
+        if not banned:
+            text = "🚫 Заблокированных пользователей нет."
+        else:
+            text = "🚫 Заблокированные пользователи:\n\n" + "\n".join(
+                f"• {user_id} — {reason or 'без причины'}"
+                for user_id, reason, _ in banned
+            )
+        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard())
+
+
+async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if require_effective_user(update).id != ADMIN_ID:
+        return
+    message = require_message_target(update)
+    if not context.args or not context.args[0].isdigit():
+        await message.reply_text("Использование: /ban USER_ID причина")
+        return
+    user_id = int(context.args[0])
+    reason = " ".join(context.args[1:]) or "Заблокирован администратором"
+    ban_user(user_id, ADMIN_ID, reason)
+    await message.reply_text(f"✅ Пользователь {user_id} заблокирован.")
+
+
+async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if require_effective_user(update).id != ADMIN_ID:
+        return
+    message = require_message_target(update)
+    if not context.args or not context.args[0].isdigit():
+        await message.reply_text("Использование: /unban USER_ID")
+        return
+    user_id = int(context.args[0])
+    result = unban_user(user_id)
+    await message.reply_text(
+        "✅ Пользователь разблокирован." if result else "ℹ️ Пользователь не найден в списке банов."
+    )
+
+
+async def banned_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if require_effective_user(update).id != ADMIN_ID:
+        return
+    banned = get_banned_users()
+    text = "🚫 Бан-лист пуст." if not banned else "🚫 Бан-лист:\n\n" + "\n".join(
+        f"• {user_id} — {reason or 'без причины'}" for user_id, reason, _ in banned
+    )
+    await require_message_target(update).reply_text(text[:4000])
+
+
 async def handle_admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query is None or update.effective_user.id != ADMIN_ID:
+    if query is None or query.message is None or require_effective_user(update).id != ADMIN_ID:
         return
 
     await query.answer()
@@ -122,14 +218,15 @@ async def handle_admin_reply_callback(update: Update, context: ContextTypes.DEFA
 
 
 async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if require_effective_user(update).id != ADMIN_ID:
         return
 
     user_id = context.user_data.get("admin_reply_to")
-    if not user_id or not update.effective_message:
+    message = require_message_target(update)
+    if not user_id:
         return
 
-    text = update.effective_message.text
+    text = message.text
     if not text:
         return
 
@@ -138,9 +235,9 @@ async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAU
             chat_id=user_id,
             text=f"📩 Ответ администратора:\n\n{text}",
         )
-        await update.effective_message.reply_text("✅ Ответ отправлен пользователю.")
+        await message.reply_text("✅ Ответ отправлен пользователю.")
     except Exception as error:
-        await update.effective_message.reply_text(f"❌ Не удалось отправить ответ: {error}")
+        await message.reply_text(f"❌ Не удалось отправить ответ: {error}")
     finally:
         context.user_data.pop("admin_reply_to", None)
 
@@ -148,14 +245,16 @@ async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAU
 
 
 async def cancel_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    if require_effective_user(update).id != ADMIN_ID:
         return
     context.user_data.pop("admin_reply_to", None)
-    await update.effective_message.reply_text("✅ Ответ отменён.")
+    await require_message_target(update).reply_text("✅ Ответ отменён.")
 
 
 async def handle_premium_stub(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if query is None or query.message is None:
+        return
     await query.answer("⭐ Premium будет добавлен позже.")
     await query.message.reply_text("⭐ Premium будет добавлен позже.")
 
@@ -163,6 +262,8 @@ async def handle_premium_stub(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def handle_bonus_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user = update.effective_user
+    if query is None or query.message is None or user is None:
+        return
     await query.answer()
 
     if has_active_bonus_request(user.id):
@@ -225,7 +326,7 @@ async def handle_bonus_request(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_admin_bonus_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if update.effective_user.id != ADMIN_ID:
+    if query is None or query.message is None or require_effective_user(update).id != ADMIN_ID:
         await query.answer("Доступ запрещён.", show_alert=True)
         return
 

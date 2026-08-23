@@ -5,12 +5,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Message, Update
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from utils.logger import logger
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 from utils.user_locks import get_user_lock
 
 
@@ -39,9 +39,7 @@ class VideoToolsHandler:
         print("FFprobe:", self.ffprobe_path)
         
     async def handle_main_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        message = get_message_target(update)
-        if message is None:
-            return
+        message = require_message_target(update)
 
         context.user_data["video_tools"] = True
         await message.reply_text("📤 Отправьте видеофайл")
@@ -52,12 +50,10 @@ class VideoToolsHandler:
 
         message = update.message
         if message is None or message.video is None:
-            target = get_message_target(update)
-            if target is not None:
-                await target.reply_text("📤 Отправьте видеофайл")
+            await require_message_target(update).reply_text("📤 Отправьте видеофайл")
             return
 
-        lock = await get_user_lock(context, update.effective_user.id)
+        lock = await get_user_lock(context, require_effective_user(update).id)
         async with lock:
             await self._handle_video_message_locked(update, context, message)
 
@@ -139,40 +135,41 @@ class VideoToolsHandler:
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
-        if query is None or not query.data:
+        if query is None or query.message is None or not query.data:
             return
+        message = require_message_target(update)
 
         await query.answer()
         action = query.data.split(":", 1)[1]
 
         if action == "cancel":
             self._cleanup(context)
-            await query.message.reply_text("❌ Операция отменена.")
+            await message.reply_text("❌ Операция отменена.")
             return
 
         file_path = context.user_data.get("video_tools_file")
         if not file_path:
-            await query.message.reply_text("⚠️ Видео не найдено. Отправьте его заново.")
+            await message.reply_text("⚠️ Видео не найдено. Отправьте его заново.")
             return
 
         input_path = Path(file_path)
         if not input_path.exists():
-            await query.message.reply_text("⚠️ Видео не найдено. Отправьте его заново.")
+            await message.reply_text("⚠️ Видео не найдено. Отправьте его заново.")
             return
 
-        lock = await get_user_lock(context, update.effective_user.id)
+        lock = await get_user_lock(context, require_effective_user(update).id)
         async with lock:
             try:
                 if action == "extract_mp3":
-                    await self._extract_mp3(query.message, input_path, context)
+                    await self._extract_mp3(message, input_path, context)
                 elif action == "extract_frame":
-                    await self._extract_frame(query.message, input_path, context)
+                    await self._extract_frame(message, input_path, context)
                 elif action == "compress_video":
-                    await self._compress_video(query.message, input_path, context)
+                    await self._compress_video(message, input_path, context)
                 else:
-                    await query.message.reply_text("⚠️ Неизвестное действие.")
+                    await message.reply_text("⚠️ Неизвестное действие.")
             except Exception as exc:
-                await query.message.reply_text(f"❌ Ошибка: {exc}")
+                await message.reply_text(f"❌ Ошибка: {exc}")
 
     async def _extract_mp3(self, message, input_path: Path, context: ContextTypes.DEFAULT_TYPE):
         if not self.ffmpeg_path:

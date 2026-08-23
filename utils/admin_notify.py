@@ -1,7 +1,7 @@
 import hashlib
 import time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions
 from config import ADMIN_ID
 
 
@@ -18,6 +18,13 @@ async def notify_admin_user_message(context, update, text: str):
     message_text = text.strip()
     if not message_text:
         return
+
+    alerts = context.application.bot_data.setdefault("admin_user_alerts", {})
+    alert_key = str(user.id)
+    now = time.monotonic()
+    if now - alerts.get(alert_key, 0) < 600:
+        return
+    alerts[alert_key] = now
 
     # Avoid sending the same user message twice during rapid duplicate updates.
     fingerprint = hashlib.sha256(
@@ -39,6 +46,7 @@ async def notify_admin_user_message(context, update, text: str):
         reply_markup=InlineKeyboardMarkup(
             [[InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}")]]
         ),
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
 
 
@@ -69,4 +77,5 @@ async def notify_admin_error(context, update, error):
             f"⚠️ {error_text[:3000]}"
         ),
         reply_markup=reply_markup,
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
     )

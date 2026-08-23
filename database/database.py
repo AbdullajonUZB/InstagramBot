@@ -110,6 +110,16 @@ def create_database():
         )
         cursor.execute(
             """
+            CREATE TABLE IF NOT EXISTS banned_users(
+                telegram_id INTEGER PRIMARY KEY,
+                reason TEXT,
+                banned_by INTEGER,
+                banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS feedback(
                 user_id INTEGER PRIMARY KEY,
                 rating INTEGER NOT NULL,
@@ -578,3 +588,36 @@ def get_admin_stats():
         "history_today": int(history_today or 0),
         "premium_users": int(premium_users or 0),
     }
+
+
+def is_user_banned(telegram_id: int) -> bool:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT 1 FROM banned_users WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone() is not None
+
+
+def ban_user(telegram_id: int, banned_by: int, reason: str = ""):
+    with connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO banned_users(telegram_id, reason, banned_by) VALUES (?, ?, ?)",
+            (telegram_id, reason[:500], banned_by),
+        )
+
+
+def unban_user(telegram_id: int) -> bool:
+    with connect() as conn:
+        cursor = conn.execute(
+            "DELETE FROM banned_users WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        return cursor.rowcount > 0
+
+
+def get_banned_users(limit: int = 50):
+    with connect() as conn:
+        return conn.execute(
+            "SELECT telegram_id, reason, banned_at FROM banned_users ORDER BY banned_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()

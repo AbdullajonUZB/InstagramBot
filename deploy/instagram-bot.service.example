@@ -1,0 +1,17 @@
+[Unit]
+Description=InstagramBot Telegram downloader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=instagrambot
+WorkingDirectory=/opt/instagrambot
+EnvironmentFile=/opt/instagrambot/.env
+ExecStart=/opt/instagrambot/.venv/bin/python /opt/instagrambot/app.py
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

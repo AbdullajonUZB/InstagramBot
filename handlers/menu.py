@@ -6,7 +6,7 @@ from keyboards.main_menu import main_menu
 from utils.i18n import translate
 from handlers.profile import profile_command
 from services import SERVICES
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 from utils.telegram_retry import reply_text_with_retry
 
 
@@ -18,14 +18,11 @@ def get_action(text: str) -> str | None:
     return None
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = get_message_target(update)
-    if message is None:
+    message = require_message_target(update)
+    if not isinstance(message.text, str):
         return
-
-    text = getattr(message, "text", None)
-    if not isinstance(text, str):
-        return
-    user_id = update.effective_user.id
+    text = message.text
+    user_id = require_effective_user(update).id
     settings = get_user_settings(user_id)
     language = settings["language"]
     action = get_action(text)

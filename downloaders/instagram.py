@@ -18,11 +18,27 @@ from database.database import (
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
 
 logger = logging.getLogger(__name__)
+
+
+def is_transient_instagram_error(error: Exception) -> bool:
+    error_text = str(error).lower()
+    return any(
+        marker in error_text
+        for marker in (
+            "winerror 10060",
+            "timed out",
+            "timeout",
+            "transporterror",
+            "connection reset",
+            "connection refused",
+            "temporary failure",
+        )
+    )
 
 
 def is_instagram_story_url(url: str) -> bool:
@@ -81,7 +97,8 @@ class InstagramDownloader(BaseDownloader):
         return output_path
 
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        message = get_message_target(update)
+        message = require_message_target(update)
+        user = require_effective_user(update)
         is_story = is_instagram_story_url(self.url)
 
         if not await ensure_download_allowed(update):
@@ -98,6 +115,7 @@ class InstagramDownloader(BaseDownloader):
             "merge_output_format": "mp4",
             "retries": 10,
             "fragment_retries": 10,
+            "extractor_retries": 5,
             "socket_timeout": 60,
             "http_headers": {
                 "User-Agent": (
@@ -110,11 +128,30 @@ class InstagramDownloader(BaseDownloader):
         }
 
         try:
-            filename = await asyncio.to_thread(
-                self.download_media,
-                "%(title)s.%(ext)s",
-                ydl_opts,
-            )
+            filename = None
+            last_download_error = None
+            for attempt in range(3):
+                try:
+                    filename = await asyncio.to_thread(
+                        self.download_media,
+                        "%(title)s.%(ext)s",
+                        ydl_opts,
+                    )
+                    break
+                except Exception as error:
+                    last_download_error = error
+                    if not is_transient_instagram_error(error) or attempt == 2:
+                        raise
+                    delay = 2 ** attempt
+                    logger.warning(
+                        "Instagram request failed (attempt %s/3); retrying in %s seconds",
+                        attempt + 1,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+
+            if filename is None:
+                raise last_download_error or RuntimeError("Instagram download failed")
 
             file_path, validation_result = await self.resolve_validated_file(
                 update,
@@ -138,16 +175,16 @@ class InstagramDownloader(BaseDownloader):
                     await message.reply_photo(
                         photo=photo,
                         caption=t(
-                            update.effective_user.id,
+                            user.id,
                             "instagram_story_photo" if is_story else "instagram_photo",
                         ),
                     )
                 add_history(
-                    update.effective_user.id,
+                    user.id,
                     self.url,
                     "Instagram Story фото" if is_story else "Фото",
                 )
-                increase_download_count(update.effective_user.id)
+                increase_download_count(user.id)
                 return True
 
             if extension in video_formats:
@@ -155,32 +192,32 @@ class InstagramDownloader(BaseDownloader):
                 file_path = await self._ensure_telegram_compatible_video(file_path)
                 size = file_path.stat().st_size
                 if size > MAX_FILE_SIZE:
-                    await message.reply_text(t(update.effective_user.id, "file_too_large"))
+                    await message.reply_text(t(user.id, "file_too_large"))
                     return False
 
                 await send_video(
                     update,
                     str(file_path),
                     t(
-                        update.effective_user.id,
+                        user.id,
                         "instagram_story_video" if is_story else "instagram_video",
                     ),
                 )
                 add_history(
-                    update.effective_user.id,
+                    user.id,
                     self.url,
                     "Instagram Story видео" if is_story else "Видео",
                 )
-                increase_download_count(update.effective_user.id)
+                increase_download_count(user.id)
                 return True
 
             with open(file_path, "rb") as document:
                 await message.reply_document(
                     document=document,
-                    caption=t(update.effective_user.id, "instagram_document"),
+                    caption=t(user.id, "instagram_document"),
                 )
-            add_history(update.effective_user.id, self.url, "Документ")
-            increase_download_count(update.effective_user.id)
+            add_history(user.id, self.url, "Документ")
+            increase_download_count(user.id)
             return True
 
         except Exception as error:
@@ -188,9 +225,18 @@ class InstagramDownloader(BaseDownloader):
             if is_story and ("login" in error_text or "cookies" in error_text):
                 logger.warning("Instagram Story requires an authenticated session: %s", error)
                 await message.reply_text(
-                    t(update.effective_user.id, "instagram_story_login_required")
+                    t(user.id, "instagram_story_login_required")
                 )
                 return False
+            if is_transient_instagram_error(error):
+                logger.warning("Instagram is temporarily unavailable: %s", error)
+                try:
+                    await message.reply_text(
+                        t(user.id, "instagram_unavailable")
+                    )
+                except Exception:
+                    pass
+                return None
             await self.handle_error(update, error, "instagram_error", "Instagram ERROR")
             return False
 

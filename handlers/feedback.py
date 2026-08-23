@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 from config import ADMIN_ID
 from database.database import has_feedback, save_feedback_comment, save_feedback_rating
+from utils.message_utils import require_effective_user, require_message_target
 
 
 def feedback_keyboard():
@@ -13,9 +14,9 @@ def feedback_keyboard():
 
 
 async def ask_for_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if user and not has_feedback(user.id):
-        message = update.effective_message
+    user = require_effective_user(update)
+    if not has_feedback(user.id):
+        message = require_message_target(update)
         await message.reply_text(
             "⭐ Оцените работу бота\n\nНасколько удобно было скачать файл?",
             reply_markup=feedback_keyboard(),
@@ -24,8 +25,10 @@ async def ask_for_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if query is None or not query.data:
+        return
     await query.answer()
-    user = update.effective_user
+    user = require_effective_user(update)
     if query.data.endswith(":skip"):
         await query.edit_message_text("Хорошо, спасибо за использование бота!")
         return
@@ -45,13 +48,14 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_feedback_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.pop("awaiting_feedback_comment", False):
         return False
-    user = update.effective_user
-    comment = update.effective_message.text.strip()
+    user = require_effective_user(update)
+    message = require_message_target(update)
+    comment = (message.text or "").strip()
     if comment:
         save_feedback_comment(user.id, comment)
         await context.bot.send_message(
             ADMIN_ID,
             f"💬 Комментарий к оценке\n👤 {user.first_name or '-'} (id={user.id})\n\n{comment[:3000]}",
         )
-    await update.effective_message.reply_text("Спасибо за отзыв! Он уже отправлен администратору 🙌")
+    await message.reply_text("Спасибо за отзыв! Он уже отправлен администратору 🙌")
     return True

@@ -1,10 +1,14 @@
+from pathlib import Path
+
 from telegram.error import TimedOut
 
 from database.database import get_user_settings
 from utils.message_utils import get_message_target
+from utils.video_compat import ensure_telegram_compatible_video
 
 
 async def send_video(update, filename, video_caption, document_caption=None):
+    filename = str(await ensure_telegram_compatible_video(Path(filename)))
     with open(filename, "rb") as media:
 
         settings = get_user_settings(update.effective_user.id)

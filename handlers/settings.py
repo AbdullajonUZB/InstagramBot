@@ -11,7 +11,7 @@ from keyboards.settings import (
 )
 from keyboards.main_menu import main_menu
 from utils.i18n import translate
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 
 
 def settings_text(settings):
@@ -29,8 +29,8 @@ def settings_text(settings):
 
 
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    settings = get_user_settings(update.effective_user.id)
-    message = get_message_target(update)
+    settings = get_user_settings(require_effective_user(update).id)
+    message = require_message_target(update)
     await message.reply_text(
         settings_text(settings),
         reply_markup=settings_keyboard(settings),
@@ -39,6 +39,9 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if query is None or not query.data or query.message is None:
+        return
+    message = require_message_target(update)
     await query.answer()
 
     user_id = query.from_user.id
@@ -100,7 +103,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             translate(settings["language"], "setting_saved") + "\n\n" + settings_text(settings),
             reply_markup=settings_keyboard(settings),
         )
-        await query.message.reply_text(
+        await message.reply_text(
             translate(settings["language"], "main_menu"),
             reply_markup=main_menu(settings["language"]),
         )

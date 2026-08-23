@@ -1,8 +1,10 @@
+from telegram import Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     MessageHandler,
+    TypeHandler,
     filters,
 )
 from config import (
@@ -22,11 +24,16 @@ from handlers.download import (
 )
 from handlers.menu import menu
 from handlers.admin import (
+    admin_panel,
+    banned_command,
+    ban_command,
     admin_status,
+    unban_command,
     cancel_admin_reply,
     db,
     handle_admin_reply_callback,
     handle_admin_reply_message,
+    handle_admin_panel_callback,
     handle_bonus_request,
     handle_premium_stub,
     handle_admin_bonus_action,
@@ -34,10 +41,13 @@ from handlers.admin import (
 from handlers.settings import settings_callback
 from handlers.profile import profile_command
 from handlers.error import error_handler
+from handlers.health import health_command
 from handlers.video_tools import VideoToolsHandler
 from handlers.feedback import feedback_callback
 from keyboards.navigation import delete_message_callback
 from utils.logger import logger
+from utils.security import security_guard
+from utils.maintenance import cleanup_stale_temp_files, startup_checks
 
 logger.info("Initializing Instagram Downloader...")
 
@@ -46,6 +56,11 @@ video_tools_handler = VideoToolsHandler()
 
 def main():
     create_database()
+    for warning in startup_checks():
+        logger.warning("Startup check: %s", warning)
+    removed = cleanup_stale_temp_files()
+    if removed:
+        logger.info("Removed %s stale temporary directories", removed)
 
     # Handlers await long-running downloads; process different users' updates
     # concurrently instead of waiting for one update to finish first.
@@ -64,11 +79,18 @@ def main():
         .build()
     )
 
+    app.add_handler(TypeHandler(Update, security_guard), group=-2)
+
     # Команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("db", db))
     app.add_handler(CommandHandler("admin_status", admin_status))
+    app.add_handler(CommandHandler("health", health_command))
+    app.add_handler(CommandHandler("admin_panel", admin_panel))
+    app.add_handler(CommandHandler("ban", ban_command))
+    app.add_handler(CommandHandler("unban", unban_command))
+    app.add_handler(CommandHandler("banned", banned_command))
     app.add_handler(CommandHandler("cancel_reply", cancel_admin_reply))
 
     app.add_handler(
@@ -97,6 +119,9 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_reply_callback, pattern=r"^admin_reply:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_panel_callback, pattern=r"^admin_panel:")
     )
     app.add_handler(
         CallbackQueryHandler(handle_youtube_choice, pattern=r"^youtube_select:")

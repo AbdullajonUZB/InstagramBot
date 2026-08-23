@@ -6,14 +6,14 @@ from telegram.ext import ContextTypes
 from keyboards.main_menu import main_menu
 from database.database import get_user_settings
 from utils.i18n import translate
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    language = get_user_settings(update.effective_user.id)["language"]
+    language = get_user_settings(require_effective_user(update).id)["language"]
 
-    message = get_message_target(update)
+    message = require_message_target(update)
     banner_path = Path(__file__).resolve().parent.parent / "assets" / "welcome_banner.png"
 
     if banner_path.exists():
@@ -32,5 +32,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if query is None:
+        return
     await query.answer()
     await start(update, context)

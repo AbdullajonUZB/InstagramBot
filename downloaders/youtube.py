@@ -13,7 +13,7 @@ from downloaders.base import BaseDownloader
 from keyboards.navigation import back_to_main_menu_keyboard
 from utils.i18n import t
 from utils.media_sender import send_video
-from utils.message_utils import get_message_target
+from utils.message_utils import require_effective_user, require_message_target
 from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
 
@@ -24,7 +24,7 @@ DENO_EXECUTABLE = Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "
 
 def _youtube_runtime_options():
     options = {
-        "extractor_args": {"youtube": {"player_client": ["default", "-android_sdkless"]}},
+        "extractor_args": {"youtube": {"player_client": ["mweb"]}},
         "remote_components": ["ejs:github"],
     }
     if DENO_EXECUTABLE.exists():
@@ -38,7 +38,7 @@ class YoutubeDownloader(BaseDownloader):
 
     def _build_video_options(self):
         options = {
-            "format": "best[ext=mp4]/best",
+            "format": "18/best[ext=mp4]/best",
             "merge_output_format": "mp4",
             "max_filesize": MAX_FILE_SIZE,
         }
@@ -49,7 +49,7 @@ class YoutubeDownloader(BaseDownloader):
 
     def _build_audio_options(self):
         options = {
-            "format": "bestaudio/best",
+            "format": "18/bestaudio/best",
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
@@ -66,7 +66,8 @@ class YoutubeDownloader(BaseDownloader):
         return options
 
     async def _download_video(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        message = get_message_target(update)
+        message = require_message_target(update)
+        user = require_effective_user(update)
         logger.info("[YouTube] 2/4 Downloading")
 
         try:
@@ -101,7 +102,7 @@ class YoutubeDownloader(BaseDownloader):
         logger.info("[YouTube] 4/4 Uploading to Telegram")
         try:
             remember_video_for_mp3(context, file_path)
-            await send_video(update, str(file_path), t(update.effective_user.id, "youtube_video"))
+            await send_video(update, str(file_path), t(user.id, "youtube_video"))
         except (TimedOut, TelegramError) as error:
             logger.exception("[YouTube] Telegram send failed")
             await message.reply_text("⚠️ Не удалось отправить видео в Telegram. Попробуйте ещё раз.")
@@ -111,13 +112,14 @@ class YoutubeDownloader(BaseDownloader):
             await message.reply_text("⚠️ Не удалось отправить видео в Telegram. Попробуйте ещё раз.")
             return None
 
-        add_history(update.effective_user.id, self.url, "YouTube видео")
-        increase_download_count(update.effective_user.id)
+        add_history(user.id, self.url, "YouTube видео")
+        increase_download_count(user.id)
         logger.info("[YouTube] Successfully sent.")
         return True
 
     async def _download_audio(self, update: Update):
-        message = get_message_target(update)
+        message = require_message_target(update)
+        user = require_effective_user(update)
         logger.info("[YouTube] 2/4 Downloading")
 
         try:
@@ -168,7 +170,7 @@ class YoutubeDownloader(BaseDownloader):
                     audio=audio_file,
                     title=audio_file_path.stem,
                     performer="YouTube",
-                    caption=t(update.effective_user.id, "youtube_audio"),
+                    caption=t(user.id, "youtube_audio"),
                     read_timeout=600,
                     write_timeout=600,
                     connect_timeout=60,
@@ -183,8 +185,8 @@ class YoutubeDownloader(BaseDownloader):
             await message.reply_text("⚠️ Не удалось отправить аудио в Telegram. Попробуйте ещё раз.")
             return None
 
-        add_history(update.effective_user.id, self.url, "YouTube аудио")
-        increase_download_count(update.effective_user.id)
+        add_history(user.id, self.url, "YouTube аудио")
+        increase_download_count(user.id)
         logger.info("[YouTube] Successfully sent.")
         return True
 
