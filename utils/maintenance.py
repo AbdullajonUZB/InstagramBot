@@ -3,7 +3,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from config import BOT_TOKEN
+from config import BOT_TOKEN, PROJECT_ROOT
 
 
 STALE_TEMP_PREFIXES = ("instagram_bot_", "download_followup_", "video_tools_")
@@ -34,12 +34,13 @@ def startup_checks():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN не найден в .env")
 
-    if not Path("database/history.db").exists():
+    if not (PROJECT_ROOT / "database" / "history.db").exists():
         warnings.append("База данных будет создана при запуске")
 
-    if not Path("cookies.txt").exists():
+    cookies_path = PROJECT_ROOT / "cookies.txt"
+    if not cookies_path.exists():
         warnings.append("cookies.txt не найден: Instagram Stories могут быть недоступны")
-    elif "sessionid" not in Path("cookies.txt").read_text(encoding="utf-8", errors="ignore"):
+    elif "sessionid" not in cookies_path.read_text(encoding="utf-8", errors="ignore"):
         warnings.append("В cookies.txt нет sessionid: приватные Instagram Stories недоступны")
 
     ffmpeg = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")

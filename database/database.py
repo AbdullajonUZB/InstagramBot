@@ -15,8 +15,9 @@ def connect():
 
     logger.debug("База: %s", Path(DB_NAME).resolve())
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=10)
     conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
