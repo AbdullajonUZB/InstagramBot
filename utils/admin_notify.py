@@ -45,8 +45,11 @@ async def notify_admin_user_message(context, update, text: str):
             f"👤 {_user_label(user)}\n"
             f"💬 {message_text[:3000]}"
             ),
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}")]]
+        reply_markup=InlineKeyboardMarkup(
+            [[
+                InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}"),
+                InlineKeyboardButton("🚫 Заблокировать", callback_data=f"admin_ban:{user.id}"),
+            ]]
             ),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
@@ -68,7 +71,10 @@ async def notify_admin_error(context, update, error):
     reply_markup = None
     if user:
         reply_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}")]]
+            [[
+                InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}"),
+                InlineKeyboardButton("🚫 Заблокировать", callback_data=f"admin_ban:{user.id}"),
+            ]]
         )
 
     for admin_id in get_all_admin_ids():

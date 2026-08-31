@@ -186,7 +186,7 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
                 f"• {user_id} — {reason or 'без причины'}"
                 for user_id, reason, _ in banned
             )
-        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+        await query.edit_message_text(text[:4000], reply_markup=banned_users_keyboard(banned))
     elif action == "services":
         rows = get_download_stats_by_service()
         text = "📈 Скачивания по сервисам\n\n"
@@ -243,6 +243,18 @@ def admin_management_keyboard():
             )
         ])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_admins:back")])
+    return InlineKeyboardMarkup(rows)
+
+
+def banned_users_keyboard(banned):
+    rows = [
+        [InlineKeyboardButton(
+            f"✅ Разблокировать {telegram_id}",
+            callback_data=f"admin_unban:{telegram_id}",
+        )]
+        for telegram_id, *_ in banned
+    ]
+    rows.append([InlineKeyboardButton("⬅️ В админ-панель", callback_data="admin_panel:status")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -346,6 +358,50 @@ async def handle_admin_reply_callback(update: Update, context: ContextTypes.DEFA
         f"✍️ Напишите ответ пользователю {user_id}.\n"
         "Для отмены используйте /cancel_reply."
     )
+
+
+async def handle_admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    actor_id = require_effective_user(update).id
+    if query is None or query.message is None or not is_admin(actor_id) or not query.data:
+        return
+    try:
+        target_id = int(query.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await query.message.reply_text("❌ Некорректный ID пользователя.")
+        return
+
+    if is_admin(target_id):
+        await query.answer("Администраторов блокировать нельзя.", show_alert=True)
+        return
+
+    await query.answer()
+    ban_user(target_id, actor_id, "Заблокирован через админ-панель")
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except BadRequest:
+        pass
+    await query.message.reply_text(f"🚫 Пользователь {target_id} заблокирован.")
+
+
+async def handle_admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query is None or query.message is None or not is_admin(require_effective_user(update).id) or not query.data:
+        return
+    try:
+        target_id = int(query.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await query.message.reply_text("❌ Некорректный ID пользователя.")
+        return
+    if unban_user(target_id):
+        await query.answer("Пользователь разблокирован.", show_alert=True)
+    else:
+        await query.answer("Пользователь не найден в бан-листе.", show_alert=True)
+    banned = get_banned_users()
+    text = "🚫 Заблокированных пользователей нет." if not banned else "🚫 Заблокированные пользователи:\n\n" + "\n".join(
+        f"• {blocked_id} — {reason or 'без причины'}" for blocked_id, reason, _ in banned
+    )
+    await query.edit_message_text(text[:4000], reply_markup=banned_users_keyboard(banned))
 
 
 async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAULT_TYPE):

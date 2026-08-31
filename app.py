@@ -32,6 +32,8 @@ from handlers.admin import (
     cancel_admin_reply,
     db,
     handle_admin_reply_callback,
+    handle_admin_ban_callback,
+    handle_admin_unban_callback,
     handle_admin_reply_message,
     handle_admin_panel_callback,
     handle_bonus_request,
@@ -121,6 +123,12 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_reply_callback, pattern=r"^admin_reply:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_ban_callback, pattern=r"^admin_ban:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_unban_callback, pattern=r"^admin_unban:")
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_panel_callback, pattern=r"^admin_panel:")
