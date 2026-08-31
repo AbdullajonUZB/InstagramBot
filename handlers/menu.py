@@ -8,6 +8,7 @@ from handlers.profile import profile_command
 from services import SERVICES
 from utils.message_utils import require_effective_user, require_message_target
 from utils.telegram_retry import reply_text_with_retry
+from utils.admin_roles import is_admin
 
 
 def get_action(text: str) -> str | None:
@@ -32,7 +33,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prompt = await reply_text_with_retry(
             message,
             "🔗 Отправьте ссылку на видео или публикацию.",
-            reply_markup=main_menu(language),
+            reply_markup=main_menu(language, include_admin=is_admin(user_id)),
         )
         context.user_data["download_prompt_message_id"] = prompt.message_id
 
@@ -83,5 +84,13 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif action == "help":
         await reply_text_with_retry(message, translate(language, "help_text"))
+    elif text == "🛠 Админ-панель" and is_admin(user_id):
+        await from_admin_panel(update, context)
     elif text == "👤 Профиль":
         await profile_command(update, context)
+
+
+async def from_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from handlers.admin import admin_panel
+
+    await admin_panel(update, context)

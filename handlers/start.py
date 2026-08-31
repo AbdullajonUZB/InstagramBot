@@ -18,7 +18,8 @@ def admin_entry_keyboard() -> InlineKeyboardMarkup:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    language = get_user_settings(require_effective_user(update).id)["language"]
+    user = require_effective_user(update)
+    language = get_user_settings(user.id)["language"]
 
     message = require_message_target(update)
     banner_path = Path(__file__).resolve().parent.parent / "assets" / "welcome_banner.png"
@@ -28,12 +29,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_photo(
                 photo=InputFile(banner, filename="welcome_banner.png"),
                 caption=translate(language, "welcome"),
-                reply_markup=main_menu(language),
+                reply_markup=main_menu(language, include_admin=is_admin(user.id)),
             )
     else:
         await message.reply_text(
             translate(language, "welcome"),
-            reply_markup=main_menu(language),
+            reply_markup=main_menu(language, include_admin=is_admin(user.id)),
         )
 
     if is_admin(require_effective_user(update).id):

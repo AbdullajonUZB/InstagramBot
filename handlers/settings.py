@@ -12,6 +12,7 @@ from keyboards.settings import (
 from keyboards.main_menu import main_menu
 from utils.i18n import translate
 from utils.message_utils import require_effective_user, require_message_target
+from utils.admin_roles import is_admin
 
 
 def settings_text(settings):
@@ -105,5 +106,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await message.reply_text(
             translate(settings["language"], "main_menu"),
-            reply_markup=main_menu(settings["language"]),
+            reply_markup=main_menu(
+                settings["language"],
+                include_admin=is_admin(user_id),
+            ),
         )

@@ -3,7 +3,7 @@ from telegram import ReplyKeyboardMarkup
 from utils.i18n import translate
 from services import SERVICES
 
-def main_menu(language="ru"):
+def main_menu(language="ru", include_admin: bool = False):
 
     keyboard = [
         [
@@ -22,6 +22,8 @@ def main_menu(language="ru"):
             "💎 Купить Premium",
         ],
     ]
+    if include_admin:
+        keyboard.insert(1, ["🛠 Админ-панель"])
 
     return ReplyKeyboardMarkup(
         keyboard,

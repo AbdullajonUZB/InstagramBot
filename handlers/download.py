@@ -50,6 +50,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message.text:
         return
 
+    if context.user_data.get("admin_management_action") == "add":
+        from handlers.admin import handle_admin_management_message
+
+        await handle_admin_management_message(update, context)
+        return
+
     text = message.text.strip()
     user = require_effective_user(update)
     lock = await get_user_lock(context, user.id)

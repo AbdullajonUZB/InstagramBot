@@ -38,7 +38,6 @@ from handlers.admin import (
     handle_premium_stub,
     handle_admin_bonus_action,
     handle_admin_management_callback,
-    handle_admin_management_message,
     handle_admin_entry_callback,
 )
 from handlers.settings import settings_callback
@@ -96,13 +95,6 @@ def main():
     app.add_handler(CommandHandler("banned", banned_command))
     app.add_handler(CommandHandler("cancel_reply", cancel_admin_reply))
 
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_admin_management_message,
-        ),
-        group=-2,
-    )
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -181,6 +173,7 @@ def main():
                 r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
                 r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|📘 Facebook|"
                 r"🎵 Видео → MP3|"
+                r"🛠 Админ-панель|"
                 r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
             ),
             menu,
@@ -199,6 +192,7 @@ def main():
                 r"ℹ️ Помощь|ℹ️ Yordam|ℹ️ Help|"
                 r"📷 Instagram|▶️ YouTube|🎵 TikTok|📌 Pinterest|📘 Facebook|"
                 r"🎵 Видео → MP3|"
+                r"🛠 Админ-панель|"
                 r"⬅️ Назад|⬅️ Orqaga|⬅️ Back)$"
             ),
             handle_message,
