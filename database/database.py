@@ -129,6 +129,16 @@ def create_database():
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bot_admins(
+                telegram_id INTEGER PRIMARY KEY,
+                role TEXT NOT NULL DEFAULT 'admin',
+                added_by INTEGER NOT NULL,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
 
         _ensure_column(conn, "users", "registered_at", "TEXT")
         _ensure_column(conn, "users", "bonus_downloads_total", "INTEGER NOT NULL DEFAULT 0")
@@ -622,3 +632,36 @@ def get_banned_users(limit: int = 50):
             "SELECT telegram_id, reason, banned_at FROM banned_users ORDER BY banned_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
+
+
+def add_bot_admin(telegram_id: int, added_by: int) -> bool:
+    with connect() as conn:
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO bot_admins(telegram_id, role, added_by) VALUES (?, 'admin', ?)",
+            (telegram_id, added_by),
+        )
+        return cursor.rowcount > 0
+
+
+def remove_bot_admin(telegram_id: int) -> bool:
+    with connect() as conn:
+        cursor = conn.execute(
+            "DELETE FROM bot_admins WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        return cursor.rowcount > 0
+
+
+def get_bot_admins():
+    with connect() as conn:
+        return conn.execute(
+            "SELECT telegram_id, role, added_by, added_at FROM bot_admins ORDER BY added_at"
+        ).fetchall()
+
+
+def is_bot_admin(telegram_id: int) -> bool:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT 1 FROM bot_admins WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone() is not None

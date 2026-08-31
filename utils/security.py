@@ -4,8 +4,9 @@ from collections import defaultdict, deque
 from telegram import Update
 from telegram.ext import ApplicationHandlerStop, ContextTypes
 
-from config import ADMIN_IDS, MAX_MESSAGE_LENGTH, MAX_URL_LENGTH
+from config import MAX_MESSAGE_LENGTH, MAX_URL_LENGTH
 from database.database import is_user_banned
+from utils.admin_roles import is_admin
 
 
 COOLDOWN_SECONDS = 2
@@ -16,7 +17,7 @@ AUTO_BAN_SECONDS = 600
 
 async def security_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if user is None or user.id in ADMIN_IDS:
+    if user is None or is_admin(user.id):
         return
 
     message = update.effective_message

@@ -22,8 +22,12 @@ from database.database import (
     ban_user,
     get_banned_users,
     unban_user,
+    add_bot_admin,
+    remove_bot_admin,
+    get_bot_admins,
 )
 from utils.i18n import translate
+from utils.admin_roles import is_admin, is_owner
 
 
 async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -31,7 +35,7 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = require_effective_user(update)
     language = get_user_settings(user.id)["language"]
 
-    if user.id != ADMIN_ID:
+    if not is_admin(user.id):
 
         add_security_log(
             user.id,
@@ -94,7 +98,7 @@ async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    if not is_admin(require_effective_user(update).id):
         return
 
     stats = get_admin_stats()
@@ -107,32 +111,37 @@ async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-def admin_panel_keyboard():
-    return InlineKeyboardMarkup(
+def admin_panel_keyboard(owner: bool = False):
+    rows = [
         [
-            [
-                InlineKeyboardButton("📊 Статистика", callback_data="admin_panel:status"),
-                InlineKeyboardButton("🚫 Баны", callback_data="admin_panel:banned"),
-            ],
-            [InlineKeyboardButton("🔄 Обновить", callback_data="admin_panel:refresh")],
-        ]
-    )
+            InlineKeyboardButton("📊 Статистика", callback_data="admin_panel:status"),
+            InlineKeyboardButton("🚫 Баны", callback_data="admin_panel:banned"),
+        ],
+        [InlineKeyboardButton("🔄 Обновить", callback_data="admin_panel:refresh")],
+    ]
+    if owner:
+        rows.append([InlineKeyboardButton("👥 Администраторы", callback_data="admin_panel:admins")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    user_id = require_effective_user(update).id
+    if not is_admin(user_id):
         return
     await require_message_target(update).reply_text(
         "🛠 Админская панель\n\nВыберите действие:",
-        reply_markup=admin_panel_keyboard(),
+        reply_markup=admin_panel_keyboard(is_owner(user_id)),
     )
 
 
 async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query is None or query.message is None or require_effective_user(update).id != ADMIN_ID:
+    user_id = require_effective_user(update).id
+    if query is None or query.message is None or not is_admin(user_id):
         return
     await query.answer()
+    if not query.data:
+        return
     action = query.data.split(":", 1)[1]
 
     if action in {"status", "refresh"}:
@@ -145,7 +154,7 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
             f"👑 Premium: {stats['premium_users']}"
         )
         try:
-            await query.edit_message_text(text, reply_markup=admin_panel_keyboard())
+            await query.edit_message_text(text, reply_markup=admin_panel_keyboard(is_owner(user_id)))
         except BadRequest as error:
             if "message is not modified" not in str(error).lower():
                 raise
@@ -158,11 +167,84 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
                 f"• {user_id} — {reason or 'без причины'}"
                 for user_id, reason, _ in banned
             )
-        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard())
+        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+    elif action == "admins" and is_owner(user_id):
+        await query.edit_message_text(
+            _admins_text(),
+            reply_markup=admin_management_keyboard(),
+        )
+
+
+def _admins_text() -> str:
+    rows = get_bot_admins()
+    if not rows:
+        return "👥 Администраторы\n\nДополнительных администраторов пока нет."
+    lines = ["👥 Администраторы\n", f"👑 Владелец: {ADMIN_ID}", ""]
+    lines.extend(f"🛡 Администратор: {telegram_id}" for telegram_id, *_ in rows)
+    return "\n".join(lines)
+
+
+def admin_management_keyboard():
+    rows = [[InlineKeyboardButton("➕ Добавить администратора", callback_data="admin_admins:add")]]
+    for telegram_id, *_ in get_bot_admins():
+        rows.append([
+            InlineKeyboardButton(
+                f"❌ Удалить {telegram_id}",
+                callback_data=f"admin_admins:remove:{telegram_id}",
+            )
+        ])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_admins:back")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def handle_admin_management_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = require_effective_user(update).id
+    if query is None or query.message is None or not is_owner(user_id) or not query.data:
+        return
+    await query.answer()
+    parts = query.data.split(":")
+    action = parts[1] if len(parts) > 1 else ""
+
+    if action == "add":
+        context.user_data["admin_management_action"] = "add"
+        await query.message.reply_text(
+            "➕ Отправьте Telegram ID пользователя, которого нужно сделать администратором."
+        )
+    elif action == "remove" and len(parts) == 3 and parts[2].isdigit():
+        removed_id = int(parts[2])
+        remove_bot_admin(removed_id)
+        await query.edit_message_text(_admins_text(), reply_markup=admin_management_keyboard())
+    elif action == "back":
+        context.user_data.pop("admin_management_action", None)
+        await query.edit_message_text(
+            "🛠 Админская панель\n\nВыберите действие:",
+            reply_markup=admin_panel_keyboard(True),
+        )
+
+
+async def handle_admin_management_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = require_effective_user(update).id
+    if not is_owner(user_id) or context.user_data.get("admin_management_action") != "add":
+        return
+    message = require_message_target(update)
+    text = (message.text or "").strip()
+    if not text.isdigit() or int(text) <= 0:
+        await message.reply_text("⚠️ Отправьте корректный числовой Telegram ID.")
+        raise ApplicationHandlerStop
+    new_admin_id = int(text)
+    if new_admin_id == ADMIN_ID:
+        await message.reply_text("ℹ️ Владелец уже имеет максимальные права.")
+    elif add_bot_admin(new_admin_id, user_id):
+        await message.reply_text(f"✅ Пользователь {new_admin_id} добавлен как администратор.")
+    else:
+        await message.reply_text("ℹ️ Этот пользователь уже является администратором.")
+    context.user_data.pop("admin_management_action", None)
+    raise ApplicationHandlerStop
 
 
 async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    if not is_admin(require_effective_user(update).id):
         return
     message = require_message_target(update)
     if not context.args or not context.args[0].isdigit():
@@ -175,7 +257,7 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    if not is_admin(require_effective_user(update).id):
         return
     message = require_message_target(update)
     if not context.args or not context.args[0].isdigit():
@@ -189,7 +271,7 @@ async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def banned_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    if not is_admin(require_effective_user(update).id):
         return
     banned = get_banned_users()
     text = "🚫 Бан-лист пуст." if not banned else "🚫 Бан-лист:\n\n" + "\n".join(
@@ -200,7 +282,7 @@ async def banned_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_admin_reply_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query is None or query.message is None or require_effective_user(update).id != ADMIN_ID:
+    if query is None or query.message is None or not is_admin(require_effective_user(update).id):
         return
 
     await query.answer()
@@ -218,7 +300,7 @@ async def handle_admin_reply_callback(update: Update, context: ContextTypes.DEFA
 
 
 async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    if not is_admin(require_effective_user(update).id):
         return
 
     user_id = context.user_data.get("admin_reply_to")
@@ -245,7 +327,7 @@ async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAU
 
 
 async def cancel_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    if not is_admin(require_effective_user(update).id):
         return
     context.user_data.pop("admin_reply_to", None)
     await require_message_target(update).reply_text("✅ Ответ отменён.")
@@ -326,7 +408,9 @@ async def handle_bonus_request(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_admin_bonus_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query is None or query.message is None or require_effective_user(update).id != ADMIN_ID:
+    if query is None or query.message is None:
+        return
+    if not is_admin(require_effective_user(update).id):
         await query.answer("Доступ запрещён.", show_alert=True)
         return
 
@@ -336,9 +420,10 @@ async def handle_admin_bonus_action(update: Update, context: ContextTypes.DEFAUL
     if len(parts) != 4:
         return
 
-    action, decision, amount, request_id = parts[1], parts[1], parts[2], parts[3]
+    decision, amount, request_id = parts[1], parts[2], parts[3]
     request_id = int(request_id)
     amount = int(amount)
+    actor_id = require_effective_user(update).id
 
     request = get_bonus_request(request_id)
     if not request:
@@ -346,7 +431,7 @@ async def handle_admin_bonus_action(update: Update, context: ContextTypes.DEFAUL
         return
 
     if decision == "approve":
-        approved = approve_bonus_request(request_id, amount, ADMIN_ID)
+        approved = approve_bonus_request(request_id, amount, actor_id)
         if approved:
             user_id = request[1]
             await context.bot.send_message(
@@ -364,7 +449,7 @@ async def handle_admin_bonus_action(update: Update, context: ContextTypes.DEFAUL
             await query.edit_message_text("❌ Не удалось обработать запрос.", reply_markup=None)
       
     else:
-        decline_bonus_request(request_id, ADMIN_ID)
+        decline_bonus_request(request_id, actor_id)
         user_id = request[1]
         await context.bot.send_message(
             chat_id=user_id,

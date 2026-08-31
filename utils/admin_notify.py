@@ -3,6 +3,7 @@ import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions
 from config import ADMIN_ID
+from utils.admin_roles import get_all_admin_ids
 
 
 def _user_label(user):
@@ -12,7 +13,7 @@ def _user_label(user):
 
 async def notify_admin_user_message(context, update, text: str):
     user = update.effective_user
-    if user is None or user.id == ADMIN_ID:
+    if user is None or user.id in get_all_admin_ids():
         return
 
     message_text = text.strip()
@@ -36,18 +37,19 @@ async def notify_admin_user_message(context, update, text: str):
         return
     recent[fingerprint] = now
 
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=(
+    for admin_id in get_all_admin_ids():
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=(
             "✉️ Сообщение от пользователя\n\n"
             f"👤 {_user_label(user)}\n"
             f"💬 {message_text[:3000]}"
-        ),
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}")]]
-        ),
-        link_preview_options=LinkPreviewOptions(is_disabled=True),
-    )
+            ),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}")]]
+            ),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
 
 
 async def notify_admin_error(context, update, error):
@@ -69,13 +71,14 @@ async def notify_admin_error(context, update, error):
             [[InlineKeyboardButton("✉️ Ответить", callback_data=f"admin_reply:{user.id}")]]
         )
 
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=(
+    for admin_id in get_all_admin_ids():
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=(
             "🚨 Ошибка бота\n\n"
             f"👤 {user_line}\n"
             f"⚠️ {error_text[:3000]}"
-        ),
-        reply_markup=reply_markup,
-        link_preview_options=LinkPreviewOptions(is_disabled=True),
-    )
+            ),
+            reply_markup=reply_markup,
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )

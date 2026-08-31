@@ -4,13 +4,13 @@ from pathlib import Path
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from config import ADMIN_ID
 from database.database import get_admin_stats
 from utils.message_utils import require_effective_user, require_message_target
+from utils.admin_roles import is_admin
 
 
 async def health_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if require_effective_user(update).id != ADMIN_ID:
+    if not is_admin(require_effective_user(update).id):
         return
 
     db_status = "✅" if Path("database/history.db").exists() else "⚠️"

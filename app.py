@@ -37,6 +37,8 @@ from handlers.admin import (
     handle_bonus_request,
     handle_premium_stub,
     handle_admin_bonus_action,
+    handle_admin_management_callback,
+    handle_admin_management_message,
 )
 from handlers.settings import settings_callback
 from handlers.profile import profile_command
@@ -96,6 +98,13 @@ def main():
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
+            handle_admin_management_message,
+        ),
+        group=-2,
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
             handle_admin_reply_message,
         ),
         group=-1,
@@ -122,6 +131,9 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_panel_callback, pattern=r"^admin_panel:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_management_callback, pattern=r"^admin_admins:")
     )
     app.add_handler(
         CallbackQueryHandler(handle_youtube_choice, pattern=r"^youtube_select:")
