@@ -134,6 +134,15 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def handle_admin_entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = require_effective_user(update).id
+    if query is None or not is_admin(user_id):
+        return
+    await query.answer()
+    await admin_panel(update, context)
+
+
 async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = require_effective_user(update).id

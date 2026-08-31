@@ -39,6 +39,7 @@ from handlers.admin import (
     handle_admin_bonus_action,
     handle_admin_management_callback,
     handle_admin_management_message,
+    handle_admin_entry_callback,
 )
 from handlers.settings import settings_callback
 from handlers.profile import profile_command
@@ -131,6 +132,9 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_panel_callback, pattern=r"^admin_panel:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_entry_callback, pattern=r"^admin_open_panel$")
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_management_callback, pattern=r"^admin_admins:")

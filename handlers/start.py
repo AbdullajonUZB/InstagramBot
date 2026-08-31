@@ -1,12 +1,19 @@
 from pathlib import Path
 
-from telegram import InputFile, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
 from telegram.ext import ContextTypes
 
 from keyboards.main_menu import main_menu
 from database.database import get_user_settings
 from utils.i18n import translate
 from utils.message_utils import require_effective_user, require_message_target
+from utils.admin_roles import is_admin
+
+
+def admin_entry_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🛠 Админ-панель", callback_data="admin_open_panel")]]
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -27,6 +34,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(
             translate(language, "welcome"),
             reply_markup=main_menu(language),
+        )
+
+    if is_admin(require_effective_user(update).id):
+        await message.reply_text(
+            "🛠 Управление ботом:",
+            reply_markup=admin_entry_keyboard(),
         )
 
 
