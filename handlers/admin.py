@@ -25,9 +25,13 @@ from database.database import (
     add_bot_admin,
     remove_bot_admin,
     get_bot_admins,
+    get_download_stats_by_service,
+    get_recent_users,
+    get_recent_security_events,
 )
 from utils.i18n import translate
 from utils.admin_roles import is_admin, is_owner
+from utils.maintenance import startup_checks
 
 
 async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -114,9 +118,15 @@ async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def admin_panel_keyboard(owner: bool = False):
     rows = [
         [
-            InlineKeyboardButton("📊 Статистика", callback_data="admin_panel:status"),
+            InlineKeyboardButton("📊 Dashboard", callback_data="admin_panel:status"),
+            InlineKeyboardButton("📈 Сервисы", callback_data="admin_panel:services"),
+        ],
+        [
+            InlineKeyboardButton("👥 Пользователи", callback_data="admin_panel:users"),
             InlineKeyboardButton("🚫 Баны", callback_data="admin_panel:banned"),
         ],
+        [InlineKeyboardButton("🛡 Безопасность", callback_data="admin_panel:security")],
+        [InlineKeyboardButton("🩺 Здоровье", callback_data="admin_panel:health")],
         [InlineKeyboardButton("🔄 Обновить", callback_data="admin_panel:refresh")],
     ]
     if owner:
@@ -156,7 +166,7 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
     if action in {"status", "refresh"}:
         stats = get_admin_stats()
         text = (
-            "🛠 Админская панель\n\n"
+            "🛠 Dashboard\n\n"
             f"👥 Пользователей: {stats['users']}\n"
             f"📥 Скачиваний сегодня: {stats['downloads_today']}\n"
             f"🗂 Истории сегодня: {stats['history_today']}\n"
@@ -176,6 +186,36 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
                 f"• {user_id} — {reason or 'без причины'}"
                 for user_id, reason, _ in banned
             )
+        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+    elif action == "services":
+        rows = get_download_stats_by_service()
+        text = "📈 Скачивания по сервисам\n\n"
+        text += "\n".join(f"• {media_type}: {count}" for media_type, count in rows) or "Данных пока нет."
+        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+    elif action == "users":
+        rows = get_recent_users()
+        text = "👥 Последние пользователи\n\n"
+        if rows:
+            text += "\n".join(
+                f"• {first_name or '-'} (@{username or '-'}, ID: {telegram_id})"
+                f" — {'Premium' if is_premium else 'обычный'}, сегодня: {downloads_today}"
+                for telegram_id, username, first_name, is_premium, downloads_today, _ in rows
+            )
+        else:
+            text += "Пользователей пока нет."
+        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+    elif action == "security":
+        rows = get_recent_security_events()
+        text = "🛡 Последние события безопасности\n\n"
+        text += "\n".join(
+            f"• {created_at} — {telegram_id or '-'} — {event or '-'} {details or ''}"
+            for telegram_id, event, details, created_at in rows
+        ) or "Событий пока нет."
+        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+    elif action == "health":
+        warnings = startup_checks()
+        text = "🩺 Состояние бота\n\n✅ Приложение запущено\n"
+        text += "\n".join(f"⚠️ {warning}" for warning in warnings) or "✅ Критических предупреждений нет."
         await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
     elif action == "admins" and is_owner(user_id):
         await query.edit_message_text(

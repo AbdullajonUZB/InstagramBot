@@ -601,6 +601,46 @@ def get_admin_stats():
     }
 
 
+def get_download_stats_by_service():
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT media_type, COUNT(*)
+            FROM downloads
+            GROUP BY media_type
+            ORDER BY COUNT(*) DESC
+            """
+        ).fetchall()
+    return [(str(media_type or "Неизвестно"), int(count)) for media_type, count in rows]
+
+
+def get_recent_users(limit: int = 10):
+    with connect() as conn:
+        return conn.execute(
+            """
+            SELECT telegram_id, username, first_name, is_premium,
+                   downloads_today, registered_at
+            FROM users
+            ORDER BY COALESCE(registered_at, '') DESC, telegram_id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+
+def get_recent_security_events(limit: int = 15):
+    with connect() as conn:
+        return conn.execute(
+            """
+            SELECT telegram_id, action, details, created_at
+            FROM security_log
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+
 def is_user_banned(telegram_id: int) -> bool:
     with connect() as conn:
         return conn.execute(
