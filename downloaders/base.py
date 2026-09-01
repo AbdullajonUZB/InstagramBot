@@ -77,6 +77,19 @@ class BaseDownloader(ABC):
                 self.logger.exception("Failed to download media from %s", self.url)
             raise
 
+        downloaded_files = [
+            path for path in self.temp_dir.rglob("*")
+            if path.is_file() and not path.name.endswith(".part")
+        ]
+        video_files = [
+            path for path in downloaded_files
+            if path.suffix.lower() in VIDEO_EXTENSIONS
+        ]
+        if video_files:
+            downloaded_file = max(video_files, key=lambda path: path.stat().st_size)
+        elif downloaded_files and not downloaded_file.exists():
+            downloaded_file = max(downloaded_files, key=lambda path: path.stat().st_size)
+
         self.logger.debug("Download finished, file created at %s", downloaded_file)
         return downloaded_file
 
@@ -100,7 +113,10 @@ class BaseDownloader(ABC):
             return file_path
 
         if self.temp_dir is not None and self.temp_dir.exists():
-            files = [path for path in self.temp_dir.iterdir() if path.is_file()]
+            files = [
+                path for path in self.temp_dir.rglob("*")
+                if path.is_file() and not path.name.endswith(".part")
+            ]
             video_files = [
                 path for path in files
                 if path.suffix.lower() in VIDEO_EXTENSIONS
