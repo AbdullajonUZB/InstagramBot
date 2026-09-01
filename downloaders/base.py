@@ -10,6 +10,9 @@ from utils.i18n import t
 from utils.message_utils import require_effective_user, require_message_target
 
 
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".flv"}
+
+
 def is_transient_download_error(error: Exception) -> bool:
     error_text = str(error).lower()
     return any(
@@ -93,14 +96,22 @@ class BaseDownloader(ABC):
 
     def resolve_downloaded_file(self, filename: str | Path) -> Path | None:
         file_path = Path(filename)
-        if file_path.exists():
+        if file_path.exists() and file_path.suffix.lower() in VIDEO_EXTENSIONS:
             return file_path
 
         if self.temp_dir is not None and self.temp_dir.exists():
             files = [path for path in self.temp_dir.iterdir() if path.is_file()]
-            return files[0] if files else None
+            video_files = [
+                path for path in files
+                if path.suffix.lower() in VIDEO_EXTENSIONS
+            ]
+            if video_files:
+                return max(video_files, key=lambda path: path.stat().st_size)
+            if file_path.exists():
+                return file_path
+            return max(files, key=lambda path: path.stat().st_size) if files else None
 
-        return None
+        return file_path if file_path.exists() else None
 
     async def resolve_validated_file(
         self,
