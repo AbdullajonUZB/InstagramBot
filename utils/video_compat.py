@@ -9,7 +9,7 @@ def _tool(name: str):
 
 
 async def ensure_telegram_compatible_video(file_path: Path) -> Path:
-    """Return an MP4 encoded as H.264/AAC for reliable mobile playback."""
+    """Normalize video geometry and encode H.264/AAC for reliable mobile playback."""
     ffprobe = _tool("ffprobe")
     ffmpeg = _tool("ffmpeg")
     if not ffprobe or not ffmpeg:
@@ -23,15 +23,18 @@ async def ensure_telegram_compatible_video(file_path: Path) -> Path:
         capture_output=True, text=True, check=False,
     )
     codec = probe.stdout.strip().lower()
-    if codec == "h264" and file_path.suffix.lower() == ".mp4":
+    # Avoid a second conversion when a downloader already normalized the file.
+    if codec == "h264" and file_path.suffix.lower() == ".mp4" and file_path.stem.endswith("_telegram"):
         return file_path
 
     output_path = file_path.with_name(f"{file_path.stem}_telegram.mp4")
     result = await asyncio.to_thread(
         subprocess.run,
         [ffmpeg, "-y", "-i", str(file_path), "-map", "0:v:0", "-map", "0:a?",
+         "-vf", "scale=trunc(iw*sar/2)*2:trunc(ih/2)*2,setsar=1",
          "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-         "-c:a", "aac", "-movflags", "+faststart", str(output_path)],
+         "-c:a", "aac", "-map_metadata", "0", "-metadata:s:v:0", "rotate=0",
+         "-movflags", "+faststart", str(output_path)],
         capture_output=True, text=True, check=False,
     )
     if result.returncode != 0 or not output_path.exists():
