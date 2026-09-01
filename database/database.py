@@ -628,6 +628,23 @@ def get_recent_users(limit: int = 10):
         ).fetchall()
 
 
+def get_user_by_username(username: str):
+    normalized = username.strip().lstrip("@").lower()
+    if not normalized:
+        return None
+    with connect() as conn:
+        return conn.execute(
+            """
+            SELECT telegram_id, username, first_name, is_premium,
+                   downloads_today, registered_at
+            FROM users
+            WHERE lower(username) = ?
+            LIMIT 1
+            """,
+            (normalized,),
+        ).fetchone()
+
+
 def get_recent_security_events(limit: int = 15):
     with connect() as conn:
         return conn.execute(

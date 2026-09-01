@@ -28,6 +28,7 @@ from database.database import (
     get_download_stats_by_service,
     get_recent_users,
     get_recent_security_events,
+    get_user_by_username,
 )
 from utils.i18n import translate
 from utils.admin_roles import is_admin, is_owner
@@ -270,8 +271,28 @@ async def handle_admin_management_callback(update: Update, context: ContextTypes
     if action == "add":
         context.user_data["admin_management_action"] = "add"
         await query.message.reply_text(
-            "➕ Отправьте Telegram ID пользователя, которого нужно сделать администратором."
+            "➕ Отправьте @username пользователя, которого нужно сделать администратором.\n"
+            "Пользователь должен сначала запустить бота."
         )
+    elif action == "confirm_add" and len(parts) == 3 and parts[2].isdigit():
+        new_admin_id = int(parts[2])
+        if context.user_data.get("pending_admin") != new_admin_id:
+            await query.answer("Запрос уже устарел.", show_alert=True)
+            return
+        if add_bot_admin(new_admin_id, user_id):
+            context.user_data.pop("pending_admin", None)
+            await query.edit_message_text(
+                f"✅ Пользователь {new_admin_id} добавлен как администратор.",
+                reply_markup=admin_management_keyboard(),
+            )
+        else:
+            await query.edit_message_text(
+                "ℹ️ Этот пользователь уже является администратором.",
+                reply_markup=admin_management_keyboard(),
+            )
+    elif action == "cancel_add":
+        context.user_data.pop("pending_admin", None)
+        await query.edit_message_text(_admins_text(), reply_markup=admin_management_keyboard())
     elif action == "remove" and len(parts) == 3 and parts[2].isdigit():
         removed_id = int(parts[2])
         remove_bot_admin(removed_id)
@@ -290,17 +311,42 @@ async def handle_admin_management_message(update: Update, context: ContextTypes.
         return
     message = require_message_target(update)
     text = (message.text or "").strip()
-    if not text.isdigit() or int(text) <= 0:
-        await message.reply_text("⚠️ Отправьте корректный числовой Telegram ID.")
+    if text.isdigit() and int(text) > 0:
+        new_admin_id = int(text)
+        display_name = str(new_admin_id)
+        user_record = get_user_profile(new_admin_id)
+    else:
+        username = text.lstrip("@").strip()
+        if not username.replace("_", "").isalnum() or len(username) < 5:
+            await message.reply_text("⚠️ Отправьте корректный @username Telegram.")
+            raise ApplicationHandlerStop
+        user_record = get_user_by_username(username)
+        new_admin_id = int(user_record[0]) if user_record else 0
+        display_name = f"@{username}"
+
+    if not user_record:
+        await message.reply_text(
+            "⚠️ Пользователь не найден. Попросите его открыть бота и нажать /start, "
+            "затем повторите попытку."
+        )
         raise ApplicationHandlerStop
-    new_admin_id = int(text)
     if new_admin_id == ADMIN_ID:
         await message.reply_text("ℹ️ Владелец уже имеет максимальные права.")
-    elif add_bot_admin(new_admin_id, user_id):
-        await message.reply_text(f"✅ Пользователь {new_admin_id} добавлен как администратор.")
-    else:
-        await message.reply_text("ℹ️ Этот пользователь уже является администратором.")
+        context.user_data.pop("admin_management_action", None)
+        raise ApplicationHandlerStop
+
+    context.user_data["pending_admin"] = new_admin_id
     context.user_data.pop("admin_management_action", None)
+    await message.reply_text(
+        f"👤 Найден пользователь: {display_name}\n"
+        f"🆔 ID: {new_admin_id}\n\nДобавить его как администратора?",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Добавить", callback_data=f"admin_admins:confirm_add:{new_admin_id}"),
+                InlineKeyboardButton("❌ Отмена", callback_data="admin_admins:cancel_add"),
+            ]
+        ]),
+    )
     raise ApplicationHandlerStop
 
 
