@@ -142,6 +142,25 @@ def create_database():
 
         _ensure_column(conn, "users", "registered_at", "TEXT")
         _ensure_column(conn, "users", "bonus_downloads_total", "INTEGER NOT NULL DEFAULT 0")
+        # Backfill legacy successful downloads that were previously stored
+        # only in the user history table.
+        conn.execute(
+            """
+            INSERT INTO downloads(
+                telegram_id, username, first_name, url, media_type, status, created_at
+            )
+            SELECT h.user_id, u.username, u.first_name, h.url, h.file_type,
+                   'success', h.created_at
+            FROM history h
+            LEFT JOIN users u ON u.telegram_id = h.user_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM downloads d
+                WHERE d.telegram_id = h.user_id
+                  AND d.url = h.url
+                  AND d.media_type = h.file_type
+            )
+            """
+        )
 
 
 def add_download(
@@ -279,11 +298,34 @@ def clear_history(user_id):
 
 
 def add_history(user_id, url, file_type):
-    if not get_user_settings(user_id)["history_enabled"]:
-        return
+    history_enabled = get_user_settings(user_id)["history_enabled"]
 
     with connect() as conn:
         cursor = conn.cursor()
+        user = cursor.execute(
+            "SELECT username, first_name FROM users WHERE telegram_id = ?",
+            (user_id,),
+        ).fetchone()
+        cursor.execute(
+            """
+            INSERT INTO downloads (
+                telegram_id, username, first_name, url, media_type, status
+            )
+            VALUES (?, ?, ?, ?, ?, 'success')
+            """,
+            (
+                user_id,
+                user[0] if user else None,
+                user[1] if user else None,
+                url,
+                file_type,
+            ),
+        )
+
+        if not history_enabled:
+            logger.info("Скачивание сохранено без пользовательской истории: %s", user_id)
+            return
+
         cursor.execute(
             """
             INSERT INTO history (
