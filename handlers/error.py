@@ -1,5 +1,5 @@
 from telegram import Update
-from telegram.error import NetworkError, TimedOut
+from telegram.error import Conflict, NetworkError, TimedOut
 from telegram.ext import ContextTypes
 from utils.logger import logger
 from utils.admin_notify import notify_admin_error
@@ -11,6 +11,13 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     # usually do not belong to a particular user update.
     if isinstance(context.error, (NetworkError, TimedOut)):
         logger.warning("Temporary Telegram network interruption: %s", context.error)
+        return
+
+    if isinstance(context.error, Conflict):
+        logger.error(
+            "Telegram polling conflict: another bot instance is running. "
+            "Stop duplicate instances before starting the bot again."
+        )
         return
 
     logger.exception("Exception while handling an update:", exc_info=context.error)
