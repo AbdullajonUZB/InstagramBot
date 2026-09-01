@@ -39,7 +39,11 @@ class FacebookDownloader(BaseDownloader):
             filename = await asyncio.to_thread(
                 self.download_media,
                 "facebook_%(id)s.%(ext)s",
-                {"max_filesize": MAX_FILE_SIZE},
+                {
+                    "format": "bv*+ba/b",
+                    "merge_output_format": "mp4",
+                    "max_filesize": MAX_FILE_SIZE,
+                },
             )
             logger.debug("Downloaded Facebook file path: %s", filename)
 
@@ -64,6 +68,12 @@ class FacebookDownloader(BaseDownloader):
                         caption=t(user.id, "facebook_photo"),
                     )
                 media_type = "Facebook фото"
+            elif extension in {".m4a", ".mp3", ".aac", ".wav", ".ogg"}:
+                await message.reply_text(
+                    "⚠️ По этой ссылке Facebook не предоставил видеопоток — "
+                    "доступно только аудио. Отправьте ссылку на видео или Reels."
+                )
+                return False
             else:
                 remember_video_for_mp3(context, file_path)
                 file_path = await ensure_telegram_compatible_video(file_path)
