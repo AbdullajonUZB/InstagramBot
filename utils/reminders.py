@@ -4,8 +4,8 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, Forbidden, TelegramError
 
-from config import REMINDER_AFTER_DAYS, REMINDER_BATCH_SIZE, REMINDER_INTERVAL_HOURS
-from database.database import get_inactive_users, mark_reminder_sent, set_reminders_enabled
+from config import REMINDER_BATCH_SIZE, REMINDER_INTERVAL_HOURS
+from database.database import get_bot_setting, get_inactive_users, mark_reminder_sent, set_reminders_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,13 @@ def _display_name(first_name, username):
 
 
 async def send_inactive_user_reminders(application):
-    for telegram_id, first_name, username in get_inactive_users(REMINDER_AFTER_DAYS, REMINDER_BATCH_SIZE):
+    if get_bot_setting("reminders_enabled", "1") != "1":
+        return
+    try:
+        after_days = max(1, int(get_bot_setting("reminder_after_days", "7")))
+    except (TypeError, ValueError):
+        after_days = 7
+    for telegram_id, first_name, username in get_inactive_users(after_days, REMINDER_BATCH_SIZE):
         text = (
             f"👋 {_display_name(first_name, username)}, мы по вам соскучились!\n\n"
             "Давно не скачивали видео, фото или музыку. "

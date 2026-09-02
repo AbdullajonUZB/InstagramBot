@@ -139,6 +139,18 @@ def create_database():
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bot_settings(
+                setting_key TEXT PRIMARY KEY,
+                setting_value TEXT NOT NULL
+            )
+            """
+        )
+        cursor.executemany(
+            "INSERT OR IGNORE INTO bot_settings(setting_key, setting_value) VALUES (?, ?)",
+            [("reminders_enabled", "1"), ("reminder_after_days", "7")],
+        )
 
         _ensure_column(conn, "users", "registered_at", "TEXT")
         _ensure_column(conn, "users", "bonus_downloads_total", "INTEGER NOT NULL DEFAULT 0")
@@ -499,6 +511,39 @@ def mark_reminder_sent(telegram_id: int):
 def set_reminders_enabled(telegram_id: int, enabled: bool):
     with connect() as conn:
         conn.execute("UPDATE users SET reminders_enabled = ? WHERE telegram_id = ?", (int(bool(enabled)), telegram_id))
+
+
+def get_bot_setting(key: str, default=None):
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT setting_value FROM bot_settings WHERE setting_key = ?", (key,)
+        ).fetchone()
+    return row[0] if row else default
+
+
+def update_bot_setting(key: str, value):
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO bot_settings(setting_key, setting_value) VALUES (?, ?) "
+            "ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value",
+            (key, str(value)),
+        )
+
+
+def get_reminder_settings():
+    enabled = get_bot_setting("reminders_enabled", "1") == "1"
+    try:
+        after_days = max(1, int(get_bot_setting("reminder_after_days", "7")))
+    except (TypeError, ValueError):
+        after_days = 7
+    with connect() as conn:
+        sent_total = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE last_reminder_at IS NOT NULL"
+        ).fetchone()[0]
+        sent_today = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE date(last_reminder_at) = date('now')"
+        ).fetchone()[0]
+    return {"enabled": enabled, "after_days": after_days, "sent_total": sent_total or 0, "sent_today": sent_today or 0}
 
 
 def save_feedback_comment(user_id: int, comment: str):

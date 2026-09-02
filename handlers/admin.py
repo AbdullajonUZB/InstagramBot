@@ -29,6 +29,8 @@ from database.database import (
     get_recent_users,
     get_recent_security_events,
     get_user_by_username,
+    get_reminder_settings,
+    update_bot_setting,
 )
 from utils.i18n import translate
 from utils.admin_roles import is_admin, is_owner
@@ -128,6 +130,7 @@ def admin_panel_keyboard(owner: bool = False):
         ],
         [InlineKeyboardButton("🛡 Безопасность", callback_data="admin_panel:security")],
         [InlineKeyboardButton("🩺 Здоровье", callback_data="admin_panel:health")],
+        [InlineKeyboardButton("🔔 Напоминания", callback_data="admin_panel:reminders")],
         [InlineKeyboardButton("🔄 Обновить", callback_data="admin_panel:refresh")],
     ]
     if owner:
@@ -218,11 +221,56 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
         text = "🩺 Состояние бота\n\n✅ Приложение запущено\n"
         text += "\n".join(f"⚠️ {warning}" for warning in warnings) or "✅ Критических предупреждений нет."
         await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+    elif action == "reminders" and is_owner(user_id):
+        await query.edit_message_text(
+            _reminders_text(), reply_markup=reminders_keyboard()
+        )
     elif action == "admins" and is_owner(user_id):
         await query.edit_message_text(
             _admins_text(),
             reply_markup=admin_management_keyboard(),
         )
+
+
+def _reminders_text() -> str:
+    settings = get_reminder_settings()
+    status = "включены" if settings["enabled"] else "выключены"
+    return (
+        "🔔 Напоминания пользователям\n\n"
+        f"Статус: {status}\n"
+        f"Период неактивности: {settings['after_days']} дн.\n"
+        f"Отправлено всего: {settings['sent_total']}\n"
+        f"Отправлено сегодня: {settings['sent_today']}"
+    )
+
+
+def reminders_keyboard():
+    settings = get_reminder_settings()
+    status_action = "off" if settings["enabled"] else "on"
+    status_label = "🔕 Выключить" if settings["enabled"] else "🔔 Включить"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(status_label, callback_data=f"admin_reminders:{status_action}")],
+        [InlineKeyboardButton("⏱ 3 дня", callback_data="admin_reminders:days:3"),
+         InlineKeyboardButton("⏱ 7 дней", callback_data="admin_reminders:days:7"),
+         InlineKeyboardButton("⏱ 14 дней", callback_data="admin_reminders:days:14")],
+        [InlineKeyboardButton("⬅️ В админ-панель", callback_data="admin_panel:status")],
+    ])
+
+
+async def handle_admin_reminders_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = require_effective_user(update).id
+    if query is None or not is_owner(user_id) or not query.data:
+        return
+    await query.answer()
+    parts = query.data.split(":")
+    if parts[1] == "on":
+        update_bot_setting("reminders_enabled", 1)
+    elif parts[1] == "off":
+        update_bot_setting("reminders_enabled", 0)
+    elif parts[1] == "days" and len(parts) == 3 and parts[2] in {"3", "7", "14"}:
+        update_bot_setting("reminder_after_days", parts[2])
+    await query.edit_message_text(_reminders_text(), reply_markup=reminders_keyboard())
 
 
 def _admins_text() -> str:
