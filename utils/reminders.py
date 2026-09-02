@@ -56,7 +56,9 @@ async def reminder_loop(application):
 
 
 async def reminder_post_init(application):
-    application.bot_data["reminder_task"] = application.create_task(reminder_loop(application), name="inactive-user-reminders")
+    application.bot_data["reminder_task"] = asyncio.create_task(
+        reminder_loop(application), name="inactive-user-reminders"
+    )
 
 
 async def reminder_post_shutdown(application):

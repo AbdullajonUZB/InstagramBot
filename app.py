@@ -55,6 +55,7 @@ from utils.security import security_guard
 from utils.maintenance import cleanup_stale_temp_files, startup_checks
 from utils.reminders import reminder_post_init, reminder_post_shutdown
 from handlers.reminders import reminder_callback
+from utils.instance_lock import SingleInstanceLock
 
 logger.info("Initializing Instagram Downloader...")
 
@@ -62,6 +63,12 @@ video_tools_handler = VideoToolsHandler()
 
 
 def main():
+    try:
+        instance_lock = SingleInstanceLock().acquire()
+    except RuntimeError as error:
+        logger.error("Запуск остановлен: %s", error)
+        return
+
     create_database()
     for warning in startup_checks():
         logger.warning("Startup check: %s", warning)
@@ -220,6 +227,9 @@ def main():
     logger.info("Instagram Downloader started")
     logger.info("=" * 50)
 
-    app.run_polling()
+    try:
+        app.run_polling()
+    finally:
+        instance_lock.release()
 if __name__ == "__main__":
     main()
