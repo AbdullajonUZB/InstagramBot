@@ -52,6 +52,8 @@ from keyboards.navigation import delete_message_callback
 from utils.logger import logger
 from utils.security import security_guard
 from utils.maintenance import cleanup_stale_temp_files, startup_checks
+from utils.reminders import reminder_post_init, reminder_post_shutdown
+from handlers.reminders import reminder_callback
 
 logger.info("Initializing Instagram Downloader...")
 
@@ -80,6 +82,8 @@ def main():
         .get_updates_write_timeout(TELEGRAM_WRITE_TIMEOUT)
         .get_updates_pool_timeout(TELEGRAM_POOL_TIMEOUT)
         .concurrent_updates(True)
+        .post_init(reminder_post_init)
+        .post_shutdown(reminder_post_shutdown)
         .build()
     )
 
@@ -112,6 +116,7 @@ def main():
             pattern=r"^settings:"
         )
     )
+    app.add_handler(CallbackQueryHandler(reminder_callback, pattern=r"^reminder:"))
     app.add_handler(
         CallbackQueryHandler(handle_bonus_request, pattern=r"^bonus_request$")
     )

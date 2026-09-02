@@ -142,6 +142,10 @@ def create_database():
 
         _ensure_column(conn, "users", "registered_at", "TEXT")
         _ensure_column(conn, "users", "bonus_downloads_total", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "users", "last_seen_at", "TEXT")
+        _ensure_column(conn, "users", "reminders_enabled", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(conn, "users", "last_reminder_at", "TEXT")
+        conn.execute("UPDATE users SET last_seen_at = COALESCE(last_seen_at, registered_at) WHERE last_seen_at IS NULL")
         # Backfill legacy successful downloads that were previously stored
         # only in the user history table.
         conn.execute(
@@ -369,7 +373,8 @@ def register_user(telegram_id, username, first_name):
             UPDATE users
             SET username = ?,
                 first_name = ?,
-                registered_at = COALESCE(registered_at, datetime('now'))
+                registered_at = COALESCE(registered_at, datetime('now')),
+                last_seen_at = datetime('now')
             WHERE telegram_id = ?
             """,
             (
@@ -467,6 +472,33 @@ def save_feedback_rating(user_id: int, rating: int):
             "INSERT OR IGNORE INTO feedback(user_id, rating) VALUES (?, ?)",
             (user_id, rating),
         )
+
+
+def get_inactive_users(after_days: int = 7, limit: int = 100):
+    after_days = max(1, int(after_days))
+    limit = max(1, min(int(limit), 1000))
+    with connect() as conn:
+        return conn.execute(
+            """
+            SELECT telegram_id, first_name, username FROM users
+            WHERE COALESCE(reminders_enabled, 1) = 1
+              AND last_seen_at IS NOT NULL
+              AND datetime(last_seen_at) <= datetime('now', ?)
+              AND (last_reminder_at IS NULL OR datetime(last_reminder_at) <= datetime('now', ?))
+            ORDER BY datetime(last_seen_at) ASC LIMIT ?
+            """,
+            (f"-{after_days} days", f"-{after_days} days", limit),
+        ).fetchall()
+
+
+def mark_reminder_sent(telegram_id: int):
+    with connect() as conn:
+        conn.execute("UPDATE users SET last_reminder_at = datetime('now') WHERE telegram_id = ?", (telegram_id,))
+
+
+def set_reminders_enabled(telegram_id: int, enabled: bool):
+    with connect() as conn:
+        conn.execute("UPDATE users SET reminders_enabled = ? WHERE telegram_id = ?", (int(bool(enabled)), telegram_id))
 
 
 def save_feedback_comment(user_id: int, comment: str):
