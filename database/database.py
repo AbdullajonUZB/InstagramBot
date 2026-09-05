@@ -533,7 +533,7 @@ def update_bot_setting(key: str, value):
 def get_reminder_settings():
     enabled = get_bot_setting("reminders_enabled", "1") == "1"
     try:
-        after_days = max(1, int(get_bot_setting("reminder_after_days", "7")))
+        after_days = max(1, int(str(get_bot_setting("reminder_after_days", "7"))))
     except (TypeError, ValueError):
         after_days = 7
     with connect() as conn:
