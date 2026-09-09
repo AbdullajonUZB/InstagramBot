@@ -2,6 +2,7 @@ import unittest
 
 from downloaders.instagram import is_instagram_story_url, is_transient_instagram_error
 from services import extract_service_link
+from downloaders.facebook import FACEBOOK_FORMAT
 
 
 class RoutingTests(unittest.TestCase):
@@ -28,6 +29,11 @@ class RoutingTests(unittest.TestCase):
         self.assertTrue(is_transient_instagram_error(Exception("WinError 10060")))
         self.assertTrue(is_transient_instagram_error(Exception("connection reset")))
         self.assertFalse(is_transient_instagram_error(Exception("You need to log in")))
+
+    def test_facebook_format_prioritizes_telegram_compatible_streams(self):
+        self.assertIn("format_id=sd", FACEBOOK_FORMAT)
+        self.assertIn("height<=1280", FACEBOOK_FORMAT)
+        self.assertIn("vcodec^=avc", FACEBOOK_FORMAT)
 
 
 if __name__ == "__main__":

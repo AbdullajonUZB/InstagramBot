@@ -19,6 +19,17 @@ from utils.video_compat import ensure_telegram_compatible_video
 
 logger = logging.getLogger(__name__)
 
+# Facebook часто отдаёт несколько DASH-потоков, включая тяжёлый AV1 1440p.
+# Сначала берём совместимый поток разумного размера, затем используем
+# остальные варианты как запасные.
+FACEBOOK_FORMAT = (
+    "bv*[format_id=hd][height<=1280]+ba/"
+    "bv*[format_id=sd]+ba/"
+    "bv*[ext=mp4][vcodec^=avc][height<=1280]+ba/"
+    "bv*[ext=mp4][height<=1280]+ba/"
+    "b[ext=mp4]/bv*+ba/b"
+)
+
 
 class FacebookDownloader(BaseDownloader):
     def __init__(self, url: str, logger=None, temp_root=None):
@@ -40,7 +51,7 @@ class FacebookDownloader(BaseDownloader):
                 self.download_media,
                 "facebook_%(id)s.%(ext)s",
                 {
-                    "format": "bv*+ba/b",
+                    "format": FACEBOOK_FORMAT,
                     "merge_output_format": "mp4",
                     "max_filesize": MAX_FILE_SIZE,
                 },
