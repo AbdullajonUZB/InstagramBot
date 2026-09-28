@@ -6,6 +6,7 @@ from downloaders.facebook import FACEBOOK_FORMAT
 from downloaders.youtube import _youtube_runtime_options
 from downloaders.youtube import YoutubeDownloader
 from handlers.history import history_keyboard
+from handlers.menu import compact_history_date
 from downloaders.base import MEDIA_EXTENSIONS
 from handlers.admin import admin_panel_keyboard
 from utils.media_cache import make_cache_key
@@ -100,6 +101,9 @@ class RoutingTests(unittest.TestCase):
             for button in row
         ]
         self.assertIn("settings:language:auto", callbacks)
+
+    def test_history_date_is_compact(self):
+        self.assertEqual(compact_history_date("2026-09-28 12:57:42"), "28.09 12:57")
 
 
 if __name__ == "__main__":

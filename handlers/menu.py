@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from telegram import Update
 from telegram.ext import ContextTypes
 from database.database import get_history, get_user_settings
@@ -10,6 +12,15 @@ from services import SERVICES
 from utils.message_utils import require_effective_user, require_message_target
 from utils.telegram_retry import reply_text_with_retry
 from utils.admin_roles import is_admin
+
+
+def compact_history_date(created_at):
+    """Format a history timestamp for a short mobile-friendly list."""
+    value = str(created_at or "")
+    try:
+        return datetime.fromisoformat(value).strftime("%d.%m %H:%M")
+    except ValueError:
+        return value[:16] if value else ""
 
 
 def get_action(text: str) -> str | None:
@@ -76,8 +87,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         history_text = translate(language, "history_title")
         for index, item in enumerate(history, start=1):
-            file_type, url, created_at = item
-            history_text += f"{index}. {file_type}\n📅 {created_at}\n🔗 {url}\n\n"
+            file_type, _url, created_at = item
+            history_text += f"{index}. {file_type} · {compact_history_date(created_at)}\n"
 
         await reply_text_with_retry(message, history_text, reply_markup=history_keyboard(history))
     elif action == "settings":
