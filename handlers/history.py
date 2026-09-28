@@ -14,9 +14,20 @@ from utils.user_locks import get_user_lock
 
 def history_keyboard(history):
     rows = []
+    current_row = []
     for index, (file_type, _url, _created_at) in enumerate(history, start=1):
         label = "🎵" if "аудио" in str(file_type).lower() else "📥"
-        rows.append([InlineKeyboardButton(f"{label} Скачать №{index}", callback_data=f"history:download:{index}")])
+        current_row.append(
+            InlineKeyboardButton(
+                f"{label} №{index}",
+                callback_data=f"history:download:{index}",
+            )
+        )
+        if len(current_row) == 2:
+            rows.append(current_row)
+            current_row = []
+    if current_row:
+        rows.append(current_row)
     return InlineKeyboardMarkup(rows) if rows else None
 
 

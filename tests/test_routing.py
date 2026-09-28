@@ -65,6 +65,7 @@ class RoutingTests(unittest.TestCase):
         ])
         callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
         self.assertEqual(callbacks, ["history:download:1", "history:download:2"])
+        self.assertEqual(len(keyboard.inline_keyboard[0]), 2)
 
     def test_carousel_media_extensions_include_photos_and_videos(self):
         self.assertIn(".mp4", MEDIA_EXTENSIONS)
