@@ -45,6 +45,10 @@ def is_instagram_story_url(url: str) -> bool:
     return bool(re.search(r"/stories/(?:highlights/)?[^/?#]+", url, re.IGNORECASE))
 
 
+def is_instagram_story_profile_url(url: str) -> bool:
+    return bool(re.search(r"/stories/(?!highlights/)[^/?#]+/?(?:\?[^#]*)?$", url, re.IGNORECASE))
+
+
 def normalize_instagram_reel_url(url: str) -> str:
     """Canonicalize Reel links and discard Instagram query parameters."""
     parsed = urlsplit(url.strip())
@@ -96,7 +100,7 @@ class InstagramDownloader(BaseDownloader):
         file_path.unlink(missing_ok=True)
         return output_path
 
-    async def _send_carousel(self, update: Update, files: list[Path]) -> bool:
+    async def _send_carousel(self, update: Update, files: list[Path], is_story: bool = False) -> bool:
         message = require_message_target(update)
         user = require_effective_user(update)
         media_items = []
@@ -122,18 +126,19 @@ class InstagramDownloader(BaseDownloader):
 
             if not media_items:
                 return False
-            media_items[0].caption = t(user.id, "instagram_carousel")
+            media_items[0].caption = t(user.id, "instagram_stories" if is_story else "instagram_carousel")
             for start in range(0, len(media_items), 10):
                 await message.reply_media_group(media=media_items[start:start + 10])
         finally:
             for handle in opened_files:
                 handle.close()
 
-        add_history(user.id, self.url, f"Instagram карусель ({len(media_items)} медиа)")
+        media_label = "Instagram Stories" if is_story else "Instagram карусель"
+        add_history(user.id, self.url, f"{media_label} ({len(media_items)} медиа)")
         increase_download_count(user.id)
         return True
 
-    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE, story_mode: str = "one"):
         message = require_message_target(update)
         user = require_effective_user(update)
         is_story = is_instagram_story_url(self.url)
@@ -145,7 +150,7 @@ class InstagramDownloader(BaseDownloader):
 
         ydl_opts = {
             "cookiefile": "cookies.txt",
-            "noplaylist": False,
+            "noplaylist": story_mode != "all",
             # Prefer Telegram-compatible H.264/MP4 + AAC/M4A. The fallbacks
             # still require a video-capable format and never request audio-only.
             "format": "bv*[ext=mp4][vcodec^=avc]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
@@ -191,8 +196,16 @@ class InstagramDownloader(BaseDownloader):
                 raise last_download_error or RuntimeError("Instagram download failed")
 
             downloaded_media = self.get_downloaded_media_files()
+            if story_mode == "video":
+                downloaded_media = [
+                    path for path in downloaded_media
+                    if path.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm"}
+                ]
+                if not downloaded_media:
+                    await message.reply_text("⚠️ В этой Story нет видео.")
+                    return False
             if len(downloaded_media) > 1:
-                return await self._send_carousel(update, downloaded_media)
+                return await self._send_carousel(update, downloaded_media, is_story=is_story)
 
             file_path, validation_result = await self.resolve_validated_file(
                 update,
@@ -289,6 +302,7 @@ async def download_instagram(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     url: str,
+    story_mode: str = "one",
 ):
     downloader = InstagramDownloader(url=normalize_instagram_reel_url(url), logger=logger)
-    return await downloader.download(update, context)
+    return await downloader.download(update, context, story_mode=story_mode)

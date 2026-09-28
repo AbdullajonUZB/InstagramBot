@@ -8,6 +8,7 @@ import downloaders.instagram
 import downloaders.pinterest
 import downloaders.tiktok
 import downloaders.youtube
+from downloaders.instagram import is_instagram_story_url
 from keyboards.main_menu import service_menu
 from keyboards.navigation import back_to_main_menu_keyboard
 from database.database import get_user_settings
@@ -127,6 +128,18 @@ async def _handle_message_locked(update, context, message, text):
         )
         return
 
+    if selected_service == "instagram" and is_instagram_story_url(url):
+        context.user_data["pending_instagram_story_url"] = url
+        await message.reply_text(
+            "📖 Что скачать из Instagram Stories?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📥 Эта история", callback_data="instagram_story:one")],
+                [InlineKeyboardButton("📚 Все истории", callback_data="instagram_story:all")],
+                [InlineKeyboardButton("🎬 Только видео", callback_data="instagram_story:video")],
+            ]),
+        )
+        return
+
     clear_followup_media(context)
     status_message = await message.reply_text(
         translate(language, "downloading")
@@ -240,6 +253,41 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
         try:
             success = await downloaders.youtube.download_youtube(
                 update, context, pending_url, choice="video", quality=quality
+            )
+        finally:
+            try:
+                await status_message.delete()
+            except Exception:
+                pass
+        if success is True:
+            await delete_download_prompt(update, context)
+            await message.reply_text(
+                "✅ Готово. Что сделать дальше?",
+                reply_markup=download_actions_keyboard(bool(context.user_data.get("followup_media_path"))),
+            )
+            await ask_for_feedback(update, context)
+
+
+async def handle_instagram_story_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query is None or not query.message or not query.data:
+        return
+    await query.answer()
+    mode = query.data.split(":", 1)[1]
+    url = context.user_data.pop("pending_instagram_story_url", None)
+    if not url or mode not in {"one", "all", "video"}:
+        await query.message.reply_text("⚠️ Ссылка на Story была потеряна. Отправьте её ещё раз.")
+        return
+
+    user_id = require_effective_user(update).id
+    lock = await get_user_lock(context, user_id)
+    async with lock:
+        clear_followup_media(context)
+        message = require_message_target(update)
+        status_message = await message.reply_text("⏳ Скачивание Story началось...")
+        try:
+            success = await downloaders.instagram.download_instagram(
+                update, context, url, story_mode=mode
             )
         finally:
             try:

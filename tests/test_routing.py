@@ -1,6 +1,6 @@
 import unittest
 
-from downloaders.instagram import is_instagram_story_url, is_transient_instagram_error
+from downloaders.instagram import is_instagram_story_profile_url, is_instagram_story_url, is_transient_instagram_error
 from services import extract_service_link
 from downloaders.facebook import FACEBOOK_FORMAT
 from downloaders.youtube import _youtube_runtime_options
@@ -28,6 +28,8 @@ class RoutingTests(unittest.TestCase):
         self.assertTrue(is_instagram_story_url("https://www.instagram.com/stories/user/123/"))
         self.assertTrue(is_instagram_story_url("https://www.instagram.com/stories/highlights/123/"))
         self.assertFalse(is_instagram_story_url("https://www.instagram.com/p/abc123/"))
+        self.assertTrue(is_instagram_story_profile_url("https://www.instagram.com/stories/user/"))
+        self.assertFalse(is_instagram_story_profile_url("https://www.instagram.com/stories/user/123/"))
 
     def test_transient_instagram_error_detection(self):
         self.assertTrue(is_transient_instagram_error(Exception("WinError 10060")))
