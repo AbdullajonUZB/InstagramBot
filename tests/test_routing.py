@@ -3,6 +3,7 @@ import unittest
 from downloaders.instagram import is_instagram_story_url, is_transient_instagram_error
 from services import extract_service_link
 from downloaders.facebook import FACEBOOK_FORMAT
+from downloaders.youtube import _youtube_runtime_options
 
 
 class RoutingTests(unittest.TestCase):
@@ -34,6 +35,12 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("format_id=sd", FACEBOOK_FORMAT)
         self.assertIn("height<=1280", FACEBOOK_FORMAT)
         self.assertIn("vcodec^=avc", FACEBOOK_FORMAT)
+
+    def test_youtube_runtime_options_have_a_safe_fallback(self):
+        options = _youtube_runtime_options()
+        self.assertIn("js_runtimes", options)
+        self.assertIn("deno", options["js_runtimes"])
+        self.assertNotIn("remote_components", options)
 
 
 if __name__ == "__main__":

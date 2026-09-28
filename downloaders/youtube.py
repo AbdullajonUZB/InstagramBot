@@ -1,5 +1,8 @@
 import asyncio
+import functools
 import logging
+import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -22,13 +25,38 @@ YOUTUBE_COOKIE_FILE = Path(__file__).resolve().parent.parent / "youtube_cookies.
 DENO_EXECUTABLE = Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links" / "deno.exe"
 
 
+@functools.lru_cache(maxsize=1)
+def _deno_is_fast_enough() -> bool:
+    """Avoid enabling bgutil when Deno hangs during its startup check."""
+    executable = str(DENO_EXECUTABLE) if DENO_EXECUTABLE.exists() else shutil.which("deno")
+    if not executable:
+        return False
+    try:
+        completed = subprocess.run(
+            [executable, "--version"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        logger.warning("Deno отвечает слишком долго; bgutil POT-провайдер отключён")
+        return False
+    return completed.returncode == 0
+
+
 def _youtube_runtime_options():
     options = {
         "extractor_args": {"youtube": {"player_client": ["mweb"]}},
-        "remote_components": ["ejs:github"],
     }
-    if DENO_EXECUTABLE.exists():
+    if _deno_is_fast_enough():
         options["js_runtimes"] = {"deno": {"path": str(DENO_EXECUTABLE)}}
+    else:
+        # Не даём установленному, но зависающему Deno автоматически
+        # подхватиться плагину bgutil-ytdlp-pot-provider.
+        options["js_runtimes"] = {"deno": {"path": os.devnull}}
     return options
 
 
