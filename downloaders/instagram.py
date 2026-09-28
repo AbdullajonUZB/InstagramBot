@@ -7,7 +7,7 @@ import subprocess
 from urllib.parse import urlsplit
 from pathlib import Path
 
-from telegram import Update
+from telegram import InputMediaPhoto, InputMediaVideo, Update
 from telegram.ext import ContextTypes
 
 from config import MAX_FILE_SIZE
@@ -96,6 +96,43 @@ class InstagramDownloader(BaseDownloader):
         file_path.unlink(missing_ok=True)
         return output_path
 
+    async def _send_carousel(self, update: Update, files: list[Path]) -> bool:
+        message = require_message_target(update)
+        user = require_effective_user(update)
+        media_items = []
+        opened_files = []
+        try:
+            for file_path in files:
+                if file_path.stat().st_size > MAX_FILE_SIZE:
+                    await message.reply_text(t(user.id, "file_too_large"))
+                    return False
+                extension = file_path.suffix.lower()
+                if extension in {".mp4", ".mov", ".mkv", ".webm"}:
+                    file_path = await self._ensure_telegram_compatible_video(file_path)
+                    if file_path.stat().st_size > MAX_FILE_SIZE:
+                        await message.reply_text(t(user.id, "file_too_large"))
+                        return False
+                    handle = file_path.open("rb")
+                    opened_files.append(handle)
+                    media_items.append(InputMediaVideo(media=handle, supports_streaming=True))
+                elif extension in {".jpg", ".jpeg", ".png", ".webp"}:
+                    handle = file_path.open("rb")
+                    opened_files.append(handle)
+                    media_items.append(InputMediaPhoto(media=handle))
+
+            if not media_items:
+                return False
+            media_items[0].caption = t(user.id, "instagram_carousel")
+            for start in range(0, len(media_items), 10):
+                await message.reply_media_group(media=media_items[start:start + 10])
+        finally:
+            for handle in opened_files:
+                handle.close()
+
+        add_history(user.id, self.url, f"Instagram карусель ({len(media_items)} медиа)")
+        increase_download_count(user.id)
+        return True
+
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = require_message_target(update)
         user = require_effective_user(update)
@@ -108,7 +145,7 @@ class InstagramDownloader(BaseDownloader):
 
         ydl_opts = {
             "cookiefile": "cookies.txt",
-            "noplaylist": True,
+            "noplaylist": False,
             # Prefer Telegram-compatible H.264/MP4 + AAC/M4A. The fallbacks
             # still require a video-capable format and never request audio-only.
             "format": "bv*[ext=mp4][vcodec^=avc]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
@@ -134,7 +171,7 @@ class InstagramDownloader(BaseDownloader):
                 try:
                     filename = await asyncio.to_thread(
                         self.download_media,
-                        "%(title)s.%(ext)s",
+                        "instagram_%(id)s_%(playlist_index)s.%(ext)s",
                         ydl_opts,
                     )
                     break
@@ -152,6 +189,10 @@ class InstagramDownloader(BaseDownloader):
 
             if filename is None:
                 raise last_download_error or RuntimeError("Instagram download failed")
+
+            downloaded_media = self.get_downloaded_media_files()
+            if len(downloaded_media) > 1:
+                return await self._send_carousel(update, downloaded_media)
 
             file_path, validation_result = await self.resolve_validated_file(
                 update,

@@ -11,6 +11,7 @@ from utils.message_utils import require_effective_user, require_message_target
 
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".flv"}
+MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def is_transient_download_error(error: Exception) -> bool:
@@ -34,6 +35,7 @@ class BaseDownloader(ABC):
         self.logger = logger or logging.getLogger(__name__)
         self.temp_root = Path(temp_root) if temp_root else Path(tempfile.gettempdir())
         self.temp_dir = None
+        self.last_info = None
 
     def prepare_temp_dir(self) -> Path:
         self.temp_root.mkdir(parents=True, exist_ok=True)
@@ -69,6 +71,7 @@ class BaseDownloader(ABC):
         try:
             with YoutubeDL(cast(Any, ytdlp_opts)) as ydl:
                 info = ydl.extract_info(self.url, download=True)
+                self.last_info = info
                 downloaded_file = Path(ydl.prepare_filename(info))
         except Exception as error:
             if is_transient_download_error(error):
@@ -92,6 +95,19 @@ class BaseDownloader(ABC):
 
         self.logger.debug("Download finished, file created at %s", downloaded_file)
         return downloaded_file
+
+    def get_downloaded_media_files(self) -> list[Path]:
+        if self.temp_dir is None or not self.temp_dir.exists():
+            return []
+        return sorted(
+            (
+                path for path in self.temp_dir.rglob("*")
+                if path.is_file()
+                and not path.name.endswith(".part")
+                and path.suffix.lower() in MEDIA_EXTENSIONS
+            ),
+            key=lambda path: path.name,
+        )
 
     def validate_file(self, file_path: Path, max_size: int | None = None) -> int:
         if not file_path.exists():

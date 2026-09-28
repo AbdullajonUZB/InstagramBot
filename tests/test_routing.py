@@ -6,6 +6,7 @@ from downloaders.facebook import FACEBOOK_FORMAT
 from downloaders.youtube import _youtube_runtime_options
 from downloaders.youtube import YoutubeDownloader
 from handlers.history import history_keyboard
+from downloaders.base import MEDIA_EXTENSIONS
 
 
 class RoutingTests(unittest.TestCase):
@@ -58,6 +59,10 @@ class RoutingTests(unittest.TestCase):
         ])
         callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
         self.assertEqual(callbacks, ["history:download:1", "history:download:2"])
+
+    def test_carousel_media_extensions_include_photos_and_videos(self):
+        self.assertIn(".mp4", MEDIA_EXTENSIONS)
+        self.assertIn(".jpg", MEDIA_EXTENSIONS)
 
 
 if __name__ == "__main__":
