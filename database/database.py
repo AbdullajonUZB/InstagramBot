@@ -169,6 +169,7 @@ def create_database():
         _ensure_column(conn, "users", "last_seen_at", "TEXT")
         _ensure_column(conn, "users", "reminders_enabled", "INTEGER NOT NULL DEFAULT 1")
         _ensure_column(conn, "users", "last_reminder_at", "TEXT")
+        _ensure_column(conn, "users", "language_code", "TEXT")
         conn.execute("UPDATE users SET last_seen_at = COALESCE(last_seen_at, registered_at) WHERE last_seen_at IS NULL")
         # Backfill legacy successful downloads that were previously stored
         # only in the user history table.
@@ -311,6 +312,19 @@ def save_cached_media(cache_key: str, media_type: str, file_id: str, caption_key
         )
 
 
+def resolve_language(language, telegram_language_code=None):
+    """Return a supported UI language, using Telegram language when set to auto."""
+    if language != "auto":
+        return language if language in {"ru", "uz", "en"} else "ru"
+
+    code = (telegram_language_code or "").lower().replace("_", "-")
+    if code.startswith("uz"):
+        return "uz"
+    if code.startswith("en"):
+        return "en"
+    return "ru"
+
+
 def get_user_settings(user_id):
     with connect() as conn:
         cursor = conn.cursor()
@@ -323,20 +337,24 @@ def get_user_settings(user_id):
         )
         cursor.execute(
             """
-            SELECT send_format, history_enabled, language
-            FROM user_settings
-            WHERE user_id = ?
+            SELECT s.send_format, s.history_enabled, s.language, u.language_code
+            FROM user_settings s
+            LEFT JOIN users u ON u.telegram_id = s.user_id
+            WHERE s.user_id = ?
             """,
             (user_id,),
         )
         row = cursor.fetchone()
 
-    send_format, history_enabled, language = row
+    send_format, history_enabled, language, language_code = row
+    language_preference = language
+    language = resolve_language(language, language_code)
 
     return {
         "send_format": send_format,
         "history_enabled": bool(history_enabled),
         "language": language,
+        "language_preference": language_preference,
     }
 
 
@@ -412,7 +430,7 @@ def add_history(user_id, url, file_type):
     logger.info("История сохранена! Записан user_id: %s", user_id)
 
 
-def register_user(telegram_id, username, first_name):
+def register_user(telegram_id, username, first_name, language_code=None):
     with connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -436,6 +454,7 @@ def register_user(telegram_id, username, first_name):
             UPDATE users
             SET username = ?,
                 first_name = ?,
+                language_code = ?,
                 registered_at = COALESCE(registered_at, datetime('now')),
                 last_seen_at = datetime('now')
             WHERE telegram_id = ?
@@ -443,6 +462,7 @@ def register_user(telegram_id, username, first_name):
             (
                 username,
                 first_name,
+                language_code,
                 telegram_id,
             ),
         )

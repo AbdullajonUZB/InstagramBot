@@ -20,7 +20,7 @@ async def security_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user is None:
         return
 
-    register_user(user.id, user.username, user.first_name)
+    register_user(user.id, user.username, user.first_name, user.language_code)
     if is_admin(user.id):
         return
 

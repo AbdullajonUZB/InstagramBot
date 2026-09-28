@@ -25,7 +25,10 @@ def settings_text(settings):
             language,
             "history_on" if settings["history_enabled"] else "history_off",
         ),
-        lang=translate(language, f"language_{language}"),
+        lang=translate(
+            language,
+            f"language_{settings.get('language_preference', language)}",
+        ),
     )
 
 

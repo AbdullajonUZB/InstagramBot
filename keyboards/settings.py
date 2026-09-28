@@ -34,6 +34,7 @@ def language_keyboard(language):
         [InlineKeyboardButton("Русский", callback_data="settings:language:ru")],
         [InlineKeyboardButton("O'zbek", callback_data="settings:language:uz")],
         [InlineKeyboardButton("English", callback_data="settings:language:en")],
+        [InlineKeyboardButton(translate(language, "language_auto"), callback_data="settings:language:auto")],
         [InlineKeyboardButton(translate(language, "back"), callback_data="settings:home")],
     ])
 

@@ -9,6 +9,8 @@ from handlers.history import history_keyboard
 from downloaders.base import MEDIA_EXTENSIONS
 from handlers.admin import admin_panel_keyboard
 from utils.media_cache import make_cache_key
+from database.database import resolve_language
+from keyboards.settings import language_keyboard
 
 
 class RoutingTests(unittest.TestCase):
@@ -83,6 +85,20 @@ class RoutingTests(unittest.TestCase):
             make_cache_key("HTTPS://Example.com/video/?x=1", "facebook"),
             "https://example.com/video?x=1|facebook",
         )
+
+    def test_auto_language_uses_telegram_language_code(self):
+        self.assertEqual(resolve_language("auto", "uz-UZ"), "uz")
+        self.assertEqual(resolve_language("auto", "en"), "en")
+        self.assertEqual(resolve_language("auto", "de"), "ru")
+        self.assertEqual(resolve_language("ru", "en"), "ru")
+
+    def test_language_keyboard_contains_auto_mode(self):
+        callbacks = [
+            button.callback_data
+            for row in language_keyboard("ru").inline_keyboard
+            for button in row
+        ]
+        self.assertIn("settings:language:auto", callbacks)
 
 
 if __name__ == "__main__":
