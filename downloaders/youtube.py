@@ -19,6 +19,7 @@ from utils.media_sender import send_video
 from utils.message_utils import require_effective_user, require_message_target
 from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
+from utils.media_cache import cache_message, make_cache_key
 
 logger = logging.getLogger(__name__)
 YOUTUBE_COOKIE_FILE = Path(__file__).resolve().parent.parent / "youtube_cookies.txt"
@@ -141,7 +142,8 @@ class YoutubeDownloader(BaseDownloader):
         logger.info("[YouTube] 4/4 Uploading to Telegram")
         try:
             remember_video_for_mp3(context, file_path)
-            await send_video(update, str(file_path), t(user.id, "youtube_video"))
+            sent_message = await send_video(update, str(file_path), t(user.id, "youtube_video"))
+            cache_message(make_cache_key(self.url, f"youtube:video:{quality}"), sent_message, "youtube_video")
         except (TimedOut, TelegramError) as error:
             logger.exception("[YouTube] Telegram send failed")
             await message.reply_text("⚠️ Не удалось отправить видео в Telegram. Попробуйте ещё раз.")
@@ -205,7 +207,7 @@ class YoutubeDownloader(BaseDownloader):
         logger.info("[YouTube] 4/4 Uploading to Telegram")
         try:
             with audio_file_path.open("rb") as audio_file:
-                await message.reply_audio(
+                sent_message = await message.reply_audio(
                     audio=audio_file,
                     title=audio_file_path.stem,
                     performer="YouTube",
@@ -215,6 +217,7 @@ class YoutubeDownloader(BaseDownloader):
                     connect_timeout=60,
                     pool_timeout=60,
                 )
+            cache_message(make_cache_key(self.url, "youtube:audio"), sent_message, "youtube_audio")
         except (TimedOut, TelegramError) as error:
             logger.exception("[YouTube] Telegram send failed")
             await message.reply_text("⚠️ Не удалось отправить аудио в Telegram. Попробуйте ещё раз.")

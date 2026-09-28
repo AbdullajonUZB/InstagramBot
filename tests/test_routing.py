@@ -8,6 +8,7 @@ from downloaders.youtube import YoutubeDownloader
 from handlers.history import history_keyboard
 from downloaders.base import MEDIA_EXTENSIONS
 from handlers.admin import admin_panel_keyboard
+from utils.media_cache import make_cache_key
 
 
 class RoutingTests(unittest.TestCase):
@@ -76,6 +77,12 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("admin_panel:status", callbacks)
         self.assertIn("admin_panel:users", callbacks)
         self.assertIn("admin_panel:security", callbacks)
+
+    def test_media_cache_key_normalizes_host_and_trailing_slash(self):
+        self.assertEqual(
+            make_cache_key("HTTPS://Example.com/video/?x=1", "facebook"),
+            "https://example.com/video?x=1|facebook",
+        )
 
 
 if __name__ == "__main__":

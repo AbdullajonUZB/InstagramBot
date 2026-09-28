@@ -13,6 +13,7 @@ from utils.i18n import t
 from utils.media_sender import send_video
 from utils.followup_media import remember_video_for_mp3
 from utils.message_utils import require_effective_user
+from utils.media_cache import cache_message, make_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,8 @@ class TikTokDownloader(BaseDownloader):
                 return False
 
             remember_video_for_mp3(context, file_path)
-            await send_video(update, str(file_path), t(user.id, "tiktok_video"))
+            sent_message = await send_video(update, str(file_path), t(user.id, "tiktok_video"))
+            cache_message(make_cache_key(self.url, "tiktok"), sent_message, "tiktok_video")
 
             add_history(user.id, self.url, "TikTok видео")
             return True

@@ -19,7 +19,7 @@ async def send_video(update, filename, video_caption, document_caption=None):
 
             for attempt in range(3):
                 try:
-                    await message.reply_document(
+                    sent_message = await message.reply_document(
                         document=media,
                         caption=document_caption or video_caption,
                         read_timeout=600,
@@ -27,7 +27,7 @@ async def send_video(update, filename, video_caption, document_caption=None):
                         connect_timeout=60,
                         pool_timeout=60,
                     )
-                    return
+                    return sent_message
 
                 except TimedOut:
 
@@ -41,7 +41,7 @@ async def send_video(update, filename, video_caption, document_caption=None):
 
             for attempt in range(3):
                 try:
-                    await message.reply_video(
+                    sent_message = await message.reply_video(
                         video=media,
                         caption=video_caption,
                         supports_streaming=True,
@@ -50,7 +50,7 @@ async def send_video(update, filename, video_caption, document_caption=None):
                         connect_timeout=60,
                         pool_timeout=60,
                     )
-                    return
+                    return sent_message
 
                 except TimedOut:
 

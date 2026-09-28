@@ -147,6 +147,18 @@ def create_database():
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS media_cache(
+                cache_key TEXT PRIMARY KEY,
+                media_type TEXT NOT NULL,
+                file_id TEXT NOT NULL,
+                caption_key TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         cursor.executemany(
             "INSERT OR IGNORE INTO bot_settings(setting_key, setting_value) VALUES (?, ?)",
             [("reminders_enabled", "1"), ("reminder_after_days", "7")],
@@ -267,6 +279,36 @@ def get_history_item(user_id, item_number: int):
         return None
     rows = get_history(user_id, limit=item_number)
     return rows[item_number - 1] if len(rows) >= item_number else None
+
+
+def get_cached_media(cache_key: str):
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT media_type, file_id, caption_key FROM media_cache WHERE cache_key = ?",
+            (cache_key,),
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE media_cache SET last_used_at = CURRENT_TIMESTAMP WHERE cache_key = ?",
+                (cache_key,),
+            )
+    return row
+
+
+def save_cached_media(cache_key: str, media_type: str, file_id: str, caption_key: str):
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO media_cache(cache_key, media_type, file_id, caption_key)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                media_type = excluded.media_type,
+                file_id = excluded.file_id,
+                caption_key = excluded.caption_key,
+                last_used_at = CURRENT_TIMESTAMP
+            """,
+            (cache_key, media_type, file_id, caption_key),
+        )
 
 
 def get_user_settings(user_id):

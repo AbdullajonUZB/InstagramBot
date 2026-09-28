@@ -16,6 +16,7 @@ from utils.message_utils import require_effective_user, require_message_target
 from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
 from utils.video_compat import ensure_telegram_compatible_video
+from utils.media_cache import cache_message, make_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +75,11 @@ class FacebookDownloader(BaseDownloader):
             logger.debug("Facebook file extension: %s", extension)
             if extension in {".jpg", ".jpeg", ".png", ".webp"}:
                 with open(file_path, "rb") as photo:
-                    await message.reply_photo(
+                    sent_message = await message.reply_photo(
                         photo=photo,
                         caption=t(user.id, "facebook_photo"),
                     )
+                cache_message(make_cache_key(self.url, "facebook"), sent_message, "facebook_photo")
                 media_type = "Facebook фото"
             elif extension in {".m4a", ".mp3", ".aac", ".wav", ".ogg"}:
                 await message.reply_text(
@@ -91,11 +93,12 @@ class FacebookDownloader(BaseDownloader):
                 if file_path.stat().st_size > MAX_FILE_SIZE:
                     await message.reply_text(t(user.id, "file_too_large"))
                     return False
-                await send_video(
+                sent_message = await send_video(
                     update,
                     str(file_path),
                     t(user.id, "facebook_video"),
                 )
+                cache_message(make_cache_key(self.url, "facebook"), sent_message, "facebook_video")
                 media_type = "Facebook видео"
 
             add_history(user.id, self.url, media_type)

@@ -21,6 +21,7 @@ from utils.media_sender import send_video
 from utils.message_utils import require_effective_user, require_message_target
 from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
+from utils.media_cache import cache_message, make_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +227,7 @@ class InstagramDownloader(BaseDownloader):
 
             if extension in image_formats:
                 with open(file_path, "rb") as photo:
-                    await message.reply_photo(
+                    sent_message = await message.reply_photo(
                         photo=photo,
                         caption=t(
                             user.id,
@@ -238,6 +239,7 @@ class InstagramDownloader(BaseDownloader):
                     self.url,
                     "Instagram Story фото" if is_story else "Фото",
                 )
+                cache_message(make_cache_key(self.url, "instagram"), sent_message, "instagram_story_photo" if is_story else "instagram_photo")
                 increase_download_count(user.id)
                 return True
 
@@ -249,7 +251,7 @@ class InstagramDownloader(BaseDownloader):
                     await message.reply_text(t(user.id, "file_too_large"))
                     return False
 
-                await send_video(
+                sent_message = await send_video(
                     update,
                     str(file_path),
                     t(
@@ -257,6 +259,7 @@ class InstagramDownloader(BaseDownloader):
                         "instagram_story_video" if is_story else "instagram_video",
                     ),
                 )
+                cache_message(make_cache_key(self.url, "instagram"), sent_message, "instagram_story_video" if is_story else "instagram_video")
                 add_history(
                     user.id,
                     self.url,
@@ -266,10 +269,11 @@ class InstagramDownloader(BaseDownloader):
                 return True
 
             with open(file_path, "rb") as document:
-                await message.reply_document(
+                sent_message = await message.reply_document(
                     document=document,
                     caption=t(user.id, "instagram_document"),
                 )
+            cache_message(make_cache_key(self.url, "instagram"), sent_message, "instagram_document")
             add_history(user.id, self.url, "Документ")
             increase_download_count(user.id)
             return True

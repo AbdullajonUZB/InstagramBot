@@ -20,6 +20,8 @@ from utils.followup_media import clear_followup_media
 from utils.media_converter import convert_video_to_mp3
 from utils.admin_notify import notify_admin_user_message
 from handlers.feedback import ask_for_feedback, handle_feedback_comment
+from database.database import add_history, increase_download_count
+from utils.media_cache import make_cache_key, send_cached_media
 
 
 def download_actions_keyboard(can_convert=False):
@@ -111,6 +113,18 @@ async def _handle_message_locked(update, context, message, text):
         )
         return
 
+    if selected_service != "youtube":
+        cached_message = await send_cached_media(update, make_cache_key(url, selected_service))
+        if cached_message is not None:
+            add_history(require_effective_user(update).id, url, f"{selected_service} (кэш)")
+            increase_download_count(require_effective_user(update).id)
+            await delete_download_prompt(update, context)
+            await message.reply_text(
+                "⚡ Файл найден в кэше. Что сделать дальше?",
+                reply_markup=download_actions_keyboard(False),
+            )
+            return
+
     if selected_service == "youtube":
         context.user_data["pending_youtube_url"] = url
         keyboard = InlineKeyboardMarkup(
@@ -190,6 +204,13 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
 
         context.user_data.pop("pending_youtube_url", None)
         clear_followup_media(context)
+        cache_variant = "youtube:audio" if choice == "audio" else "youtube:video:auto"
+        cached_message = await send_cached_media(update, make_cache_key(pending_url, cache_variant))
+        if cached_message is not None:
+            add_history(require_effective_user(update).id, pending_url, f"YouTube {'аудио' if choice == 'audio' else 'видео'} (кэш)")
+            increase_download_count(require_effective_user(update).id)
+            await message.reply_text("⚡ Файл найден в кэше. Что сделать дальше?", reply_markup=download_actions_keyboard(False))
+            return
         status_message = await message.reply_text("⏳ Скачивание началось...")
 
         try:
@@ -249,6 +270,14 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
         context.user_data.pop("pending_youtube_url", None)
         clear_followup_media(context)
         message = require_message_target(update)
+        cached_message = await send_cached_media(
+            update, make_cache_key(pending_url, f"youtube:video:{quality}")
+        )
+        if cached_message is not None:
+            add_history(require_effective_user(update).id, pending_url, "YouTube видео (кэш)")
+            increase_download_count(require_effective_user(update).id)
+            await message.reply_text("⚡ Файл найден в кэше. Что сделать дальше?", reply_markup=download_actions_keyboard(False))
+            return
         status_message = await message.reply_text("⏳ Скачивание началось...")
         try:
             success = await downloaders.youtube.download_youtube(

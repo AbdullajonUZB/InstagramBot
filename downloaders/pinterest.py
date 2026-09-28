@@ -13,6 +13,7 @@ from utils.i18n import t
 from utils.media_sender import send_video
 from utils.message_utils import require_effective_user, require_message_target
 from utils.followup_media import remember_video_for_mp3
+from utils.media_cache import cache_message, make_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +52,16 @@ class PinterestDownloader(BaseDownloader):
 
             if extension in {".jpg", ".jpeg", ".png", ".webp"}:
                 with open(file_path, "rb") as photo:
-                    await message.reply_photo(
+                    sent_message = await message.reply_photo(
                         photo=photo,
                         caption=t(user.id, "pinterest_photo"),
                     )
+                cache_message(make_cache_key(self.url, "pinterest"), sent_message, "pinterest_photo")
                 media_type = "Pinterest фото"
             else:
                 remember_video_for_mp3(context, file_path)
-                await send_video(update, str(file_path), t(user.id, "pinterest_video"))
+                sent_message = await send_video(update, str(file_path), t(user.id, "pinterest_video"))
+                cache_message(make_cache_key(self.url, "pinterest"), sent_message, "pinterest_video")
                 media_type = "Pinterest видео"
 
             add_history(user.id, self.url, media_type)
