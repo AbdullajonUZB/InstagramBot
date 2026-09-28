@@ -7,6 +7,7 @@ from downloaders.youtube import _youtube_runtime_options
 from downloaders.youtube import YoutubeDownloader
 from handlers.history import history_keyboard
 from downloaders.base import MEDIA_EXTENSIONS
+from handlers.admin import admin_panel_keyboard
 
 
 class RoutingTests(unittest.TestCase):
@@ -65,6 +66,16 @@ class RoutingTests(unittest.TestCase):
     def test_carousel_media_extensions_include_photos_and_videos(self):
         self.assertIn(".mp4", MEDIA_EXTENSIONS)
         self.assertIn(".jpg", MEDIA_EXTENSIONS)
+
+    def test_admin_panel_has_dashboard_controls(self):
+        callbacks = [
+            button.callback_data
+            for row in admin_panel_keyboard().inline_keyboard
+            for button in row
+        ]
+        self.assertIn("admin_panel:status", callbacks)
+        self.assertIn("admin_panel:users", callbacks)
+        self.assertIn("admin_panel:security", callbacks)
 
 
 if __name__ == "__main__":

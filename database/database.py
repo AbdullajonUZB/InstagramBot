@@ -729,6 +729,43 @@ def get_admin_stats():
     }
 
 
+def get_admin_dashboard_stats():
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM users),
+                (SELECT COUNT(*) FROM users WHERE datetime(last_seen_at) >= datetime('now', '-1 day')),
+                (SELECT COUNT(*) FROM users WHERE date(registered_at) = date('now')),
+                (SELECT COUNT(*) FROM users WHERE date(registered_at) >= date('now', '-6 days')),
+                (SELECT COUNT(*) FROM downloads WHERE date(created_at) = date('now')),
+                (SELECT COUNT(*) FROM downloads WHERE date(created_at) >= date('now', '-6 days')),
+                (SELECT COUNT(*) FROM downloads WHERE date(created_at) >= date('now', '-29 days'))
+            """
+        ).fetchone()
+        services = conn.execute(
+            """
+            SELECT COALESCE(media_type, 'Неизвестно'), COUNT(*)
+            FROM downloads
+            WHERE date(created_at) >= date('now', '-29 days')
+            GROUP BY media_type
+            ORDER BY COUNT(*) DESC
+            LIMIT 5
+            """
+        ).fetchall()
+
+    return {
+        "users": int(row[0] or 0),
+        "active_24h": int(row[1] or 0),
+        "new_today": int(row[2] or 0),
+        "new_7d": int(row[3] or 0),
+        "downloads_today": int(row[4] or 0),
+        "downloads_7d": int(row[5] or 0),
+        "downloads_30d": int(row[6] or 0),
+        "services": [(str(name), int(count)) for name, count in services],
+    }
+
+
 def get_download_stats_by_service():
     with connect() as conn:
         rows = conn.execute(

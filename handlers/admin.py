@@ -19,6 +19,7 @@ from database.database import (
     has_active_bonus_request,
     FREE_DAILY_LIMIT,
     get_admin_stats,
+    get_admin_dashboard_stats,
     ban_user,
     get_banned_users,
     unban_user,
@@ -168,13 +169,18 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
     action = query.data.split(":", 1)[1]
 
     if action in {"status", "refresh"}:
-        stats = get_admin_stats()
+        stats = get_admin_dashboard_stats()
         text = (
             "🛠 Dashboard\n\n"
-            f"👥 Пользователей: {stats['users']}\n"
+            f"👥 Всего пользователей: {stats['users']}\n"
+            f"🟢 Активных за 24 часа: {stats['active_24h']}\n"
+            f"🆕 Новых сегодня: {stats['new_today']}\n"
+            f"📅 Новых за 7 дней: {stats['new_7d']}\n\n"
             f"📥 Скачиваний сегодня: {stats['downloads_today']}\n"
-            f"🗂 Истории сегодня: {stats['history_today']}\n"
-            f"👑 Premium: {stats['premium_users']}"
+            f"📊 Скачиваний за 7 дней: {stats['downloads_7d']}\n"
+            f"📈 Скачиваний за 30 дней: {stats['downloads_30d']}\n\n"
+            "🔥 Популярные сервисы за 30 дней:\n"
+            + ("\n".join(f"• {name}: {count}" for name, count in stats["services"]) or "• Данных пока нет")
         )
         try:
             await query.edit_message_text(text, reply_markup=admin_panel_keyboard(is_owner(user_id)))
