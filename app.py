@@ -45,6 +45,7 @@ from handlers.admin import (
     handle_admin_reminders_callback,
 )
 from handlers.settings import settings_callback
+from handlers.history import history_callback
 from handlers.profile import profile_command
 from handlers.error import error_handler
 from handlers.health import health_command
@@ -126,6 +127,7 @@ def main():
         )
     )
     app.add_handler(CallbackQueryHandler(reminder_callback, pattern=r"^reminder:"))
+    app.add_handler(CallbackQueryHandler(history_callback, pattern=r"^history:"))
     app.add_handler(CallbackQueryHandler(handle_admin_reminders_callback, pattern=r"^admin_reminders:"))
     app.add_handler(
         CallbackQueryHandler(handle_bonus_request, pattern=r"^bonus_request$")

@@ -5,6 +5,7 @@ from handlers.settings import show_settings
 from keyboards.main_menu import main_menu
 from utils.i18n import translate
 from handlers.profile import profile_command
+from handlers.history import history_keyboard
 from services import SERVICES
 from utils.message_utils import require_effective_user, require_message_target
 from utils.telegram_retry import reply_text_with_retry
@@ -78,7 +79,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_type, url, created_at = item
             history_text += f"{index}. {file_type}\n📅 {created_at}\n🔗 {url}\n\n"
 
-        await reply_text_with_retry(message, history_text)
+        await reply_text_with_retry(message, history_text, reply_markup=history_keyboard(history))
     elif action == "settings":
         await show_settings(update, context)
 

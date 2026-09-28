@@ -260,6 +260,15 @@ def get_history(user_id, limit=20):
     return rows
 
 
+def get_history_item(user_id, item_number: int):
+    """Return one history item by its displayed 1-based number."""
+    item_number = int(item_number)
+    if item_number < 1:
+        return None
+    rows = get_history(user_id, limit=item_number)
+    return rows[item_number - 1] if len(rows) >= item_number else None
+
+
 def get_user_settings(user_id):
     with connect() as conn:
         cursor = conn.cursor()

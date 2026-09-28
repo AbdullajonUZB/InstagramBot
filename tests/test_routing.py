@@ -5,6 +5,7 @@ from services import extract_service_link
 from downloaders.facebook import FACEBOOK_FORMAT
 from downloaders.youtube import _youtube_runtime_options
 from downloaders.youtube import YoutubeDownloader
+from handlers.history import history_keyboard
 
 
 class RoutingTests(unittest.TestCase):
@@ -49,6 +50,14 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("height<=720", downloader._build_video_options("720")["format"])
         self.assertIn("height<=480", downloader._build_video_options("480")["format"])
         self.assertEqual(downloader._build_video_options("auto")["format"], "18/best[ext=mp4]/best")
+
+    def test_history_keyboard_contains_download_buttons(self):
+        keyboard = history_keyboard([
+            ("Instagram видео", "https://www.instagram.com/reel/test/", "today"),
+            ("YouTube аудио", "https://youtu.be/test", "today"),
+        ])
+        callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+        self.assertEqual(callbacks, ["history:download:1", "history:download:2"])
 
 
 if __name__ == "__main__":
