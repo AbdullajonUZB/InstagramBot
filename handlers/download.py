@@ -117,7 +117,8 @@ async def _handle_message_locked(update, context, message, text):
                 [
                     InlineKeyboardButton("🎥 Видео", callback_data="youtube_select:video"),
                     InlineKeyboardButton("🎵 Музыка (MP3)", callback_data="youtube_select:audio"),
-                ]
+                ],
+                [InlineKeyboardButton("⚙️ Выбрать качество", callback_data="youtube_quality:menu")],
             ]
         )
         await message.reply_text(
@@ -203,6 +204,53 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
                 reply_markup=download_actions_keyboard(
                     bool(context.user_data.get("followup_media_path"))
                 ),
+            )
+            await ask_for_feedback(update, context)
+
+
+async def handle_youtube_quality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query is None or not query.message or not query.data:
+        return
+    await query.answer()
+    action = query.data.split(":", 1)[1]
+    if action == "menu":
+        await query.edit_message_reply_markup(
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⚡ Авто", callback_data="youtube_quality:auto")],
+                [InlineKeyboardButton("🎞 720p", callback_data="youtube_quality:720"),
+                 InlineKeyboardButton("🎞 480p", callback_data="youtube_quality:480")],
+                [InlineKeyboardButton("🖼 Оригинал", callback_data="youtube_quality:original")],
+            ])
+        )
+        return
+
+    quality = action
+    pending_url = context.user_data.get("pending_youtube_url")
+    if not pending_url or quality not in {"auto", "720", "480", "original"}:
+        await query.message.reply_text("⚠️ Ссылка для YouTube была потеряна. Отправьте её ещё раз.")
+        return
+
+    lock = await get_user_lock(context, require_effective_user(update).id)
+    async with lock:
+        context.user_data.pop("pending_youtube_url", None)
+        clear_followup_media(context)
+        message = require_message_target(update)
+        status_message = await message.reply_text("⏳ Скачивание началось...")
+        try:
+            success = await downloaders.youtube.download_youtube(
+                update, context, pending_url, choice="video", quality=quality
+            )
+        finally:
+            try:
+                await status_message.delete()
+            except Exception:
+                pass
+        if success is True:
+            await delete_download_prompt(update, context)
+            await message.reply_text(
+                "✅ Готово. Что сделать дальше?",
+                reply_markup=download_actions_keyboard(bool(context.user_data.get("followup_media_path"))),
             )
             await ask_for_feedback(update, context)
 

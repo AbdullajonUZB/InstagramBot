@@ -49,7 +49,12 @@ def _deno_is_fast_enough() -> bool:
 
 def _youtube_runtime_options():
     options = {
-        "extractor_args": {"youtube": {"player_client": ["mweb"]}},
+        "extractor_args": {
+            "youtube": {"player_client": ["mweb"]},
+            # Внешний bgutil-провайдер иногда зависает на проверке Deno
+            # и блокирует получение форматов на 15 секунд.
+            "youtubepot-bgutilscript": {"server_home": os.devnull},
+        },
     }
     if _deno_is_fast_enough():
         options["js_runtimes"] = {"deno": {"path": str(DENO_EXECUTABLE)}}
@@ -64,9 +69,15 @@ class YoutubeDownloader(BaseDownloader):
     def __init__(self, url: str, logger=None, temp_root=None):
         super().__init__(url=url, logger=logger, temp_root=temp_root)
 
-    def _build_video_options(self):
+    def _build_video_options(self, quality: str = "auto"):
+        formats = {
+            "auto": "18/best[ext=mp4]/best",
+            "720": "best[height<=720][ext=mp4]/best[height<=720]/18/best[ext=mp4]/best",
+            "480": "best[height<=480][ext=mp4]/best[height<=480]/18/best[ext=mp4]/best",
+            "original": "bestvideo+bestaudio/best",
+        }
         options = {
-            "format": "18/best[ext=mp4]/best",
+            "format": formats.get(quality, formats["auto"]),
             "merge_output_format": "mp4",
             "max_filesize": MAX_FILE_SIZE,
         }
@@ -93,7 +104,7 @@ class YoutubeDownloader(BaseDownloader):
             options["cookiefile"] = str(YOUTUBE_COOKIE_FILE)
         return options
 
-    async def _download_video(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def _download_video(self, update: Update, context: ContextTypes.DEFAULT_TYPE, quality: str = "auto"):
         message = require_message_target(update)
         user = require_effective_user(update)
         logger.info("[YouTube] 2/4 Downloading")
@@ -102,7 +113,7 @@ class YoutubeDownloader(BaseDownloader):
             filename = await asyncio.to_thread(
                 self.download_media,
                 "%(title)s.%(ext)s",
-                self._build_video_options(),
+                self._build_video_options(quality),
             )
         except Exception as error:
             logger.exception("[YouTube] Download stage failed")
@@ -218,7 +229,7 @@ class YoutubeDownloader(BaseDownloader):
         logger.info("[YouTube] Successfully sent.")
         return True
 
-    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE, choice: str = "video"):
+    async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE, choice: str = "video", quality: str = "auto"):
         self.prepare_temp_dir()
 
         try:
@@ -228,7 +239,7 @@ class YoutubeDownloader(BaseDownloader):
             logger.info("[YouTube] 1/4 Detecting URL")
             if choice == "audio":
                 return await self._download_audio(update)
-            return await self._download_video(update, context)
+            return await self._download_video(update, context, quality=quality)
         finally:
             self.cleanup()
 
@@ -238,6 +249,7 @@ async def download_youtube(
     context: ContextTypes.DEFAULT_TYPE,
     url: str,
     choice: str = "video",
+    quality: str = "auto",
 ):
     downloader = YoutubeDownloader(url=url, logger=logger)
-    return await downloader.download(update, context, choice=choice)
+    return await downloader.download(update, context, choice=choice, quality=quality)

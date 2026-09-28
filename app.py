@@ -21,6 +21,7 @@ from handlers.download import (
     handle_download_ui_callback,
     handle_message,
     handle_youtube_choice,
+    handle_youtube_quality_callback,
 )
 from handlers.menu import menu
 from handlers.admin import (
@@ -155,6 +156,9 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_youtube_choice, pattern=r"^youtube_select:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_youtube_quality_callback, pattern=r"^youtube_quality:")
     )
     app.add_handler(
         CallbackQueryHandler(handle_download_ui_callback, pattern=r"^download_ui:")

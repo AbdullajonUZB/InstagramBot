@@ -4,6 +4,7 @@ from downloaders.instagram import is_instagram_story_url, is_transient_instagram
 from services import extract_service_link
 from downloaders.facebook import FACEBOOK_FORMAT
 from downloaders.youtube import _youtube_runtime_options
+from downloaders.youtube import YoutubeDownloader
 
 
 class RoutingTests(unittest.TestCase):
@@ -41,6 +42,13 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("js_runtimes", options)
         self.assertIn("deno", options["js_runtimes"])
         self.assertNotIn("remote_components", options)
+        self.assertIn("youtubepot-bgutilscript", options["extractor_args"])
+
+    def test_youtube_quality_selectors_are_supported(self):
+        downloader = YoutubeDownloader("https://youtu.be/test")
+        self.assertIn("height<=720", downloader._build_video_options("720")["format"])
+        self.assertIn("height<=480", downloader._build_video_options("480")["format"])
+        self.assertEqual(downloader._build_video_options("auto")["format"], "18/best[ext=mp4]/best")
 
 
 if __name__ == "__main__":
