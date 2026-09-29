@@ -22,9 +22,6 @@ def main_menu(language="ru", include_admin: bool = False):
             "💎 Купить Premium",
         ],
     ]
-    if include_admin:
-        keyboard.insert(1, ["🛠 Админ-панель"])
-
     return ReplyKeyboardMarkup(
         keyboard,
         resize_keyboard=True,

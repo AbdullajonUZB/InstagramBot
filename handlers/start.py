@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
+from telegram import InputFile, Update
 from telegram.ext import ContextTypes
 
 from keyboards.main_menu import main_menu
@@ -9,12 +9,6 @@ from utils.i18n import translate
 from utils.message_utils import require_effective_user, require_message_target
 from utils.admin_roles import is_admin
 from utils.chat_cleanup import clear_ui_messages, delete_button_message, delete_message_safely, remember_ui_message
-
-
-def admin_entry_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🛠 Админ-панель", callback_data="admin_open_panel")]]
-    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -54,19 +48,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     remember_ui_message(context, sent)
 
-    if is_admin(require_effective_user(update).id):
-        if update.callback_query:
-            sent = await context.bot.send_message(
-                chat_id=message.chat_id,
-                text="🛠 Управление ботом:",
-                reply_markup=admin_entry_keyboard(),
-            )
-        else:
-            sent = await message.reply_text(
-                "🛠 Управление ботом:",
-                reply_markup=admin_entry_keyboard(),
-            )
-        remember_ui_message(context, sent)
     if update.message is not None and update.message.text and update.message.text.startswith("/"):
         await delete_button_message(update.message)
     elif update.callback_query is not None:
