@@ -7,6 +7,7 @@ from database.database import (
     get_user_total_downloads,
 )
 from utils.message_utils import require_effective_user, require_message_target
+from utils.chat_cleanup import remember_ui_message
 
 
 async def profile_command(
@@ -67,7 +68,7 @@ async def profile_command(
         ["⬅️ Назад"],
     ]
 
-    await message.reply_text(
+    sent = await message.reply_text(
         text,
         parse_mode="HTML",
         reply_markup=ReplyKeyboardMarkup(
@@ -76,3 +77,4 @@ async def profile_command(
             is_persistent=True,
         ),
     )
+    remember_ui_message(context, sent)

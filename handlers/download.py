@@ -22,6 +22,7 @@ from utils.admin_notify import notify_admin_user_message
 from handlers.feedback import ask_for_feedback, handle_feedback_comment
 from database.database import add_history, increase_download_count
 from utils.media_cache import make_cache_key, send_cached_media
+from utils.chat_cleanup import delete_message_safely
 
 
 def download_actions_keyboard(can_convert=False):
@@ -210,6 +211,7 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
             add_history(require_effective_user(update).id, pending_url, f"YouTube {'аудио' if choice == 'audio' else 'видео'} (кэш)")
             increase_download_count(require_effective_user(update).id)
             await message.reply_text("⚡ Файл найден в кэше. Что сделать дальше?", reply_markup=download_actions_keyboard(False))
+            await delete_message_safely(query.message)
             return
         status_message = await message.reply_text("⏳ Скачивание началось...")
 
@@ -240,6 +242,7 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
                 ),
             )
             await ask_for_feedback(update, context)
+            await delete_message_safely(query.message)
 
 
 async def handle_youtube_quality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -277,6 +280,7 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
             add_history(require_effective_user(update).id, pending_url, "YouTube видео (кэш)")
             increase_download_count(require_effective_user(update).id)
             await message.reply_text("⚡ Файл найден в кэше. Что сделать дальше?", reply_markup=download_actions_keyboard(False))
+            await delete_message_safely(query.message)
             return
         status_message = await message.reply_text("⏳ Скачивание началось...")
         try:
@@ -295,6 +299,7 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
                 reply_markup=download_actions_keyboard(bool(context.user_data.get("followup_media_path"))),
             )
             await ask_for_feedback(update, context)
+            await delete_message_safely(query.message)
 
 
 async def handle_instagram_story_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -330,6 +335,7 @@ async def handle_instagram_story_callback(update: Update, context: ContextTypes.
                 reply_markup=download_actions_keyboard(bool(context.user_data.get("followup_media_path"))),
             )
             await ask_for_feedback(update, context)
+            await delete_message_safely(query.message)
 
 
 async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -367,10 +373,8 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
         except Exception as exc:
             await message.reply_text(f"❌ Не удалось создать MP3: {exc}")
     elif action == "again":
-        prompt = await message.reply_text(
-            "🔗 Отправьте ссылку на видео или публикацию."
-        )
-        context.user_data["download_prompt_message_id"] = prompt.message_id
+        await query.edit_message_text("🔗 Отправьте ссылку на видео или публикацию.")
+        context.user_data["download_prompt_message_id"] = query.message.message_id
     elif action == "close":
         clear_followup_media(context)
         await message.delete()

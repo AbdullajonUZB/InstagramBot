@@ -10,6 +10,7 @@ from services import SERVICES, extract_service_link
 from utils.followup_media import clear_followup_media
 from utils.message_utils import require_effective_user, require_message_target
 from utils.user_locks import get_user_lock
+from utils.chat_cleanup import delete_message_safely
 
 
 def history_keyboard(history):
@@ -85,3 +86,4 @@ async def history_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✅ Готово. Что сделать дальше?",
                 reply_markup=download_actions_keyboard(bool(context.user_data.get("followup_media_path"))),
             )
+            await delete_message_safely(query.message)

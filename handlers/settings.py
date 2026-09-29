@@ -9,10 +9,9 @@ from keyboards.settings import (
     language_keyboard,
     settings_keyboard,
 )
-from keyboards.main_menu import main_menu
 from utils.i18n import translate
 from utils.message_utils import require_effective_user, require_message_target
-from utils.admin_roles import is_admin
+from utils.chat_cleanup import remember_ui_message
 
 
 def settings_text(settings):
@@ -35,10 +34,11 @@ def settings_text(settings):
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     settings = get_user_settings(require_effective_user(update).id)
     message = require_message_target(update)
-    await message.reply_text(
+    sent = await message.reply_text(
         settings_text(settings),
         reply_markup=settings_keyboard(settings),
     )
+    remember_ui_message(context, sent)
 
 
 async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,11 +106,4 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             translate(settings["language"], "setting_saved") + "\n\n" + settings_text(settings),
             reply_markup=settings_keyboard(settings),
-        )
-        await message.reply_text(
-            translate(settings["language"], "main_menu"),
-            reply_markup=main_menu(
-                settings["language"],
-                include_admin=is_admin(user_id),
-            ),
         )

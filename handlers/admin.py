@@ -38,6 +38,7 @@ from database.database import (
 from utils.i18n import translate
 from utils.admin_roles import is_admin, is_owner
 from utils.maintenance import startup_checks
+from utils.chat_cleanup import clear_ui_messages, delete_button_message, remember_ui_message
 
 
 async def db(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,7 +147,23 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = require_effective_user(update).id
     if not is_admin(user_id):
         return
-    await require_message_target(update).reply_text(
+    message = require_message_target(update)
+    if update.callback_query is not None:
+        await query_edit_admin_panel(update, user_id)
+        return
+    await clear_ui_messages(context, message.chat_id)
+    sent = await message.reply_text(
+        "🛠 Админская панель\n\nВыберите действие:",
+        reply_markup=admin_panel_keyboard(is_owner(user_id)),
+    )
+    remember_ui_message(context, sent)
+    if message.text and message.text.startswith("/"):
+        await delete_button_message(message)
+
+
+async def query_edit_admin_panel(update: Update, user_id: int):
+    query = update.callback_query
+    await query.edit_message_text(
         "🛠 Админская панель\n\nВыберите действие:",
         reply_markup=admin_panel_keyboard(is_owner(user_id)),
     )
@@ -158,6 +175,11 @@ async def handle_admin_entry_callback(update: Update, context: ContextTypes.DEFA
     if query is None or not is_admin(user_id):
         return
     await query.answer()
+    await clear_ui_messages(
+        context,
+        query.message.chat_id,
+        keep_ids=(query.message.message_id,),
+    )
     await admin_panel(update, context)
 
 

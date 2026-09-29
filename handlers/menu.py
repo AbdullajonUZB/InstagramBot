@@ -12,6 +12,7 @@ from services import SERVICES
 from utils.message_utils import require_effective_user, require_message_target
 from utils.telegram_retry import reply_text_with_retry
 from utils.admin_roles import is_admin
+from utils.chat_cleanup import clear_ui_messages, delete_button_message, remember_ui_message
 
 
 def compact_history_date(created_at):
@@ -45,6 +46,10 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     settings = get_user_settings(user_id)
     language = settings["language"]
     action = get_action(text)
+    is_service_button = text in [service["button"] for service in SERVICES.values()]
+    is_menu_button = action is not None or is_service_button or text in {"🛠 Админ-панель", "👤 Профиль"}
+    if is_menu_button:
+        await clear_ui_messages(context, message.chat_id)
 
     if action == "download":
         context.user_data.pop("selected_service", None)
@@ -54,8 +59,9 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_menu(language, include_admin=is_admin(user_id)),
         )
         context.user_data["download_prompt_message_id"] = prompt.message_id
+        remember_ui_message(context, prompt)
 
-    elif text in [service["button"] for service in SERVICES.values()]:
+    elif is_service_button:
 
         print("SERVICE BUTTON PRESSED:", text)
 
@@ -65,7 +71,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 print("selected_service =", key)
 
-                await reply_text_with_retry(
+                reply = await reply_text_with_retry(
                     message,
                     translate(
                         language,
@@ -73,22 +79,26 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         service=service["button"][2:],
                     ),
                 )
+                remember_ui_message(context, reply)
 
                 break
 
     elif action == "back":
         context.user_data.pop("selected_service", None)
-        await reply_text_with_retry(
+        reply = await reply_text_with_retry(
             message,
             translate(language, "main_menu"),
             reply_markup=main_menu(language),
         )
+        remember_ui_message(context, reply)
 
     elif action == "history":
         history = get_history(user_id)
 
         if not history:
-            await reply_text_with_retry(message, translate(language, "history_empty"))
+            reply = await reply_text_with_retry(message, translate(language, "history_empty"))
+            remember_ui_message(context, reply)
+            await delete_button_message(message)
             return
 
         history_text = translate(language, "history_title")
@@ -96,20 +106,25 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_type, _url, created_at = item
             history_text += f"{index}. {file_type} · {compact_history_date(created_at)}\n"
 
-        await reply_text_with_retry(message, history_text, reply_markup=history_keyboard(history))
+        reply = await reply_text_with_retry(message, history_text, reply_markup=history_keyboard(history))
+        remember_ui_message(context, reply)
     elif action == "settings":
         await show_settings(update, context)
 
     elif action == "help":
-        await reply_text_with_retry(
+        reply = await reply_text_with_retry(
             message,
             translate(language, "help_text"),
             reply_markup=help_keyboard(language),
         )
+        remember_ui_message(context, reply)
     elif text == "🛠 Админ-панель" and is_admin(user_id):
         await from_admin_panel(update, context)
     elif text == "👤 Профиль":
         await profile_command(update, context)
+
+    if is_menu_button:
+        await delete_button_message(message)
 
 
 async def from_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
