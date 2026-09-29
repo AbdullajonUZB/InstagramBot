@@ -24,7 +24,7 @@ from handlers.download import (
     handle_youtube_quality_callback,
     handle_instagram_story_callback,
 )
-from handlers.menu import menu
+from handlers.menu import help_callback, menu
 from handlers.admin import (
     admin_panel,
     banned_command,
@@ -44,6 +44,7 @@ from handlers.admin import (
     handle_admin_management_callback,
     handle_admin_entry_callback,
     handle_admin_reminders_callback,
+    handle_admin_news_callback,
 )
 from handlers.settings import settings_callback
 from handlers.history import history_callback
@@ -128,6 +129,8 @@ def main():
         )
     )
     app.add_handler(CallbackQueryHandler(reminder_callback, pattern=r"^reminder:"))
+    app.add_handler(CallbackQueryHandler(help_callback, pattern=r"^help:"))
+    app.add_handler(CallbackQueryHandler(handle_admin_news_callback, pattern=r"^admin_news:"))
     app.add_handler(CallbackQueryHandler(history_callback, pattern=r"^history:"))
     app.add_handler(CallbackQueryHandler(handle_admin_reminders_callback, pattern=r"^admin_reminders:"))
     app.add_handler(

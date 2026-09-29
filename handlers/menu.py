@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from database.database import get_history, get_user_settings
 from handlers.settings import show_settings
@@ -29,6 +29,12 @@ def get_action(text: str) -> str | None:
             if text == translate(language, action):
                 return action
     return None
+
+
+def help_keyboard(language: str, show_news: bool = True):
+    label_key = "help_news_button" if show_news else "help_back_button"
+    callback = "help:news" if show_news else "help:home"
+    return InlineKeyboardMarkup([[InlineKeyboardButton(translate(language, label_key), callback_data=callback)]])
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = require_message_target(update)
@@ -95,7 +101,11 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_settings(update, context)
 
     elif action == "help":
-        await reply_text_with_retry(message, translate(language, "help_text"))
+        await reply_text_with_retry(
+            message,
+            translate(language, "help_text"),
+            reply_markup=help_keyboard(language),
+        )
     elif text == "🛠 Админ-панель" and is_admin(user_id):
         await from_admin_panel(update, context)
     elif text == "👤 Профиль":
@@ -106,3 +116,17 @@ async def from_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from handlers.admin import admin_panel
 
     await admin_panel(update, context)
+
+
+async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query is None or not query.data:
+        return
+    await query.answer()
+    language = get_user_settings(require_effective_user(update).id)["language"]
+    show_news = query.data == "help:news"
+    key = "news_text" if show_news else "help_text"
+    await query.edit_message_text(
+        translate(language, key),
+        reply_markup=help_keyboard(language, show_news=not show_news),
+    )

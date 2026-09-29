@@ -855,6 +855,14 @@ def get_recent_users(limit: int = 10):
         ).fetchall()
 
 
+def get_registered_user_ids():
+    """Return Telegram IDs eligible for an owner initiated news broadcast."""
+    with connect() as conn:
+        return [row[0] for row in conn.execute(
+            "SELECT telegram_id FROM users ORDER BY telegram_id"
+        ).fetchall()]
+
+
 def get_user_by_username(username: str):
     normalized = username.strip().lstrip("@").lower()
     if not normalized:

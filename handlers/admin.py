@@ -1,10 +1,11 @@
 from datetime import datetime
+import asyncio
+import sqlite3
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import ApplicationHandlerStop, ContextTypes
 from utils.message_utils import require_effective_user, require_message_target
-import sqlite3
 
 from config import ADMIN_ID
 from database.database import (
@@ -29,6 +30,7 @@ from database.database import (
     get_download_stats_by_service,
     get_recent_users,
     get_recent_security_events,
+    get_registered_user_ids,
     get_user_by_username,
     get_reminder_settings,
     update_bot_setting,
@@ -136,6 +138,7 @@ def admin_panel_keyboard(owner: bool = False):
     ]
     if owner:
         rows.append([InlineKeyboardButton("👥 Администраторы", callback_data="admin_panel:admins")])
+        rows.append([InlineKeyboardButton("📣 Уведомить о новинках", callback_data="admin_panel:news")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -236,6 +239,49 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
             _admins_text(),
             reply_markup=admin_management_keyboard(),
         )
+    elif action == "news" and is_owner(user_id):
+        count = len(get_registered_user_ids())
+        await query.edit_message_text(
+            f"📣 Уведомление о новых возможностях будет отправлено пользователям: {count}.\n\n"
+            "Отправить сейчас?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Отправить", callback_data="admin_news:send")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data="admin_panel:status")],
+            ]),
+        )
+
+
+async def handle_admin_news_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = require_effective_user(update).id
+    if query is None or query.message is None or not is_owner(user_id):
+        return
+    await query.answer()
+    if query.data != "admin_news:send":
+        return
+
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    user_ids = get_registered_user_ids()
+    delivered = 0
+    failed = 0
+    for recipient_id in user_ids:
+        language = get_user_settings(recipient_id)["language"]
+        try:
+            await context.bot.send_message(
+                chat_id=recipient_id,
+                text=translate(language, "news_text"),
+            )
+            delivered += 1
+        except TelegramError:
+            failed += 1
+        await asyncio.sleep(0.05)
+
+    await query.edit_message_text(
+        "📣 Рассылка завершена.\n\n"
+        f"✅ Доставлено: {delivered}\n"
+        f"⚠️ Не доставлено: {failed}"
+    )
 
 
 def _reminders_text() -> str:
