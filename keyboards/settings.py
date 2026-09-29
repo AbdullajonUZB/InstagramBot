@@ -9,6 +9,7 @@ def settings_keyboard(settings):
         [InlineKeyboardButton(translate(language, "settings_format"), callback_data="settings:format")],
         [InlineKeyboardButton(translate(language, "settings_history"), callback_data="settings:history")],
         [InlineKeyboardButton(translate(language, "settings_language"), callback_data="settings:language")],
+        [InlineKeyboardButton(translate(language, "back"), callback_data="main_menu")],
     ])
 
 
