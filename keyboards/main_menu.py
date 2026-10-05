@@ -1,5 +1,8 @@
-from telegram import ReplyKeyboardMarkup
+from urllib.parse import urlsplit
 
+from telegram import KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+
+from config import WEB_APP_URL
 from utils.i18n import translate
 from services import SERVICES
 
@@ -22,6 +25,14 @@ def main_menu(language="ru", include_admin: bool = False):
             "💎 Купить Premium",
         ],
     ]
+    app_url = urlsplit(WEB_APP_URL)
+    if app_url.scheme == "https" and app_url.hostname:
+        keyboard.append([
+            KeyboardButton(
+                translate(language, "open_app"),
+                web_app=WebAppInfo(url=WEB_APP_URL),
+            )
+        ])
     return ReplyKeyboardMarkup(
         keyboard,
         resize_keyboard=True,

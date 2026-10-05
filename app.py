@@ -53,6 +53,7 @@ from handlers.error import error_handler
 from handlers.health import health_command
 from handlers.video_tools import VideoToolsHandler
 from handlers.feedback import feedback_callback
+from handlers.web_app import handle_web_app_data
 from keyboards.navigation import delete_message_callback
 from utils.logger import logger
 from utils.security import security_guard
@@ -60,10 +61,21 @@ from utils.maintenance import cleanup_stale_temp_files, startup_checks
 from utils.reminders import reminder_post_init, reminder_post_shutdown
 from handlers.reminders import reminder_callback
 from utils.instance_lock import SingleInstanceLock
+from utils.web_app_server import start_web_app_server, stop_web_app_server
 
 logger.info("Initializing Instagram Downloader...")
 
 video_tools_handler = VideoToolsHandler()
+
+
+async def application_post_init(application):
+    await reminder_post_init(application)
+    await start_web_app_server(application)
+
+
+async def application_post_shutdown(application):
+    await stop_web_app_server(application)
+    await reminder_post_shutdown(application)
 
 
 def main():
@@ -94,12 +106,16 @@ def main():
         .get_updates_write_timeout(TELEGRAM_WRITE_TIMEOUT)
         .get_updates_pool_timeout(TELEGRAM_POOL_TIMEOUT)
         .concurrent_updates(True)
-        .post_init(reminder_post_init)
-        .post_shutdown(reminder_post_shutdown)
+        .post_init(application_post_init)
+        .post_shutdown(application_post_shutdown)
         .build()
     )
 
     app.add_handler(TypeHandler(Update, security_guard), group=-2)
+    app.add_handler(
+        MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data),
+        group=0,
+    )
 
     # Команды
     app.add_handler(CommandHandler("start", start))

@@ -5,6 +5,7 @@ TRANSLATIONS = {
     "ru": {
         "welcome": "✨ Добро пожаловать в Media Downloader!\n\nСкачивайте видео, фото и музыку из Instagram, YouTube, TikTok, Pinterest и Facebook.\n\n🔗 Просто отправьте ссылку — я быстро подготовлю файл для вас.\n\n👇 Выберите нужное действие в меню.",
         "download": "📥 Скачать",
+        "open_app": "📱 Открыть приложение",
         "history": "📜 История",
         "settings": "⚙ Настройки",
         "help": "ℹ️ Помощь",
@@ -73,7 +74,7 @@ TRANSLATIONS = {
     "uz": {
         "welcome": "✨ Media Downloader’ga xush kelibsiz!\n\nInstagram, YouTube, TikTok, Pinterest va Facebook’dan video, surat hamda musiqa yuklab oling.\n\n🔗 Havolani yuboring — men faylni tezda tayyorlab beraman.\n\n👇 Menyudan kerakli amalni tanlang.",
         "download": "📥 Yuklab olish", "history": "📜 Tarix", "settings": "⚙ Sozlamalar", "help": "ℹ️ Yordam", "back": "⬅️ Orqaga",
-        "choose_service": "📥 Ijtimoiy tarmoqni tanlang.", "send_service_link": "🔗 {service} havolasini yuboring.", "main_menu": "Bosh menyu.",
+        "open_app": "📱 Ilovani ochish", "choose_service": "📥 Ijtimoiy tarmoqni tanlang.", "send_service_link": "🔗 {service} havolasini yuboring.", "main_menu": "Bosh menyu.",
         "history_empty": "📜 Tarix bo'sh.", "history_title": "📜 Oxirgi yuklab olishlar:\n\n",
         "settings_title": "⚙ Sozlamalar\n\n📦 Format: {format}\n📜 Tarix: {history}\n🌍 Til: {lang}",
         "format_video": "Video", "format_document": "Hujjat", "history_on": "Yoqilgan", "history_off": "O'chirilgan",
@@ -98,7 +99,7 @@ TRANSLATIONS = {
     },
     "en": {
         "welcome": "✨ Welcome to Media Downloader!\n\nDownload videos, photos, and music from Instagram, YouTube, TikTok, Pinterest, and Facebook.\n\n🔗 Just send a link — I’ll quickly prepare the file for you.\n\n👇 Choose an action from the menu.",
-        "download": "📥 Download", "history": "📜 History", "settings": "⚙ Settings", "help": "ℹ️ Help", "back": "⬅️ Back",
+        "download": "📥 Download", "open_app": "📱 Open app", "history": "📜 History", "settings": "⚙ Settings", "help": "ℹ️ Help", "back": "⬅️ Back",
         "choose_service": "📥 Choose a social network.", "send_service_link": "🔗 Send a {service} link.", "main_menu": "Main menu.",
         "history_empty": "📜 History is empty.", "history_title": "📜 Recent downloads:\n\n",
         "settings_title": "⚙ Settings\n\n📦 Format: {format}\n📜 History: {history}\n🌍 Language: {lang}",

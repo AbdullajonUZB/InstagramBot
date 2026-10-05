@@ -51,6 +51,11 @@ TELEGRAM_GET_UPDATES_READ_TIMEOUT = 45
 MAX_MESSAGE_LENGTH = 4000
 MAX_URL_LENGTH = 2000
 
+# Telegram Mini App. The URL must be public HTTPS for Telegram clients.
+WEB_APP_URL = os.getenv("WEB_APP_URL", "").strip().rstrip("/")
+WEB_APP_HOST = os.getenv("WEB_APP_HOST", "127.0.0.1").strip() or "127.0.0.1"
+WEB_APP_PORT = _env_int("WEB_APP_PORT", 8081)
+
 # Настройки дружеских напоминаний неактивным пользователям.
 REMINDER_AFTER_DAYS = _env_int("REMINDER_AFTER_DAYS", 7)
 REMINDER_INTERVAL_HOURS = _env_int("REMINDER_INTERVAL_HOURS", 6)
