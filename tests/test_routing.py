@@ -82,6 +82,15 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("admin_panel:users", callbacks)
         self.assertIn("admin_panel:security", callbacks)
 
+    def test_owner_admin_panel_places_main_menu_at_bottom(self):
+        callbacks = [
+            button.callback_data
+            for row in admin_panel_keyboard(owner=True).inline_keyboard
+            for button in row
+        ]
+        self.assertEqual(callbacks[-1], "main_menu")
+        self.assertNotIn("admin_panel:home", callbacks)
+
     def test_media_cache_key_normalizes_host_and_trailing_slash(self):
         self.assertEqual(
             make_cache_key("HTTPS://Example.com/video/?x=1", "facebook"),

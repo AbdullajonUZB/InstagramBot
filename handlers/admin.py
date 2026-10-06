@@ -136,11 +136,11 @@ def admin_panel_keyboard(owner: bool = False):
         [InlineKeyboardButton("🩺 Здоровье", callback_data="admin_panel:health")],
         [InlineKeyboardButton("🔔 Напоминания", callback_data="admin_panel:reminders")],
         [InlineKeyboardButton("🔄 Обновить", callback_data="admin_panel:refresh")],
-        [InlineKeyboardButton("⬅️ В главное меню", callback_data="main_menu")],
     ]
     if owner:
         rows.append([InlineKeyboardButton("👥 Администраторы", callback_data="admin_panel:admins")])
         rows.append([InlineKeyboardButton("📣 Уведомить о новинках", callback_data="admin_panel:news")])
+    rows.append([InlineKeyboardButton("⬅️ В главное меню", callback_data="main_menu")])
     return InlineKeyboardMarkup(rows)
 
 
