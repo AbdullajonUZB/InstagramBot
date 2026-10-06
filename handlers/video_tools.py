@@ -42,7 +42,12 @@ class VideoToolsHandler:
         message = require_message_target(update)
 
         context.user_data["video_tools"] = True
-        await message.reply_text("📤 Отправьте видеофайл")
+        await message.reply_text(
+            "📤 Отправьте видеофайл",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад", callback_data="video_tools:back")
+            ]]),
+        )
 
     async def handle_video_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.user_data.get("video_tools"):
@@ -50,7 +55,12 @@ class VideoToolsHandler:
 
         message = update.message
         if message is None or message.video is None:
-            await require_message_target(update).reply_text("📤 Отправьте видеофайл")
+            await require_message_target(update).reply_text(
+                "📤 Отправьте видеофайл",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад", callback_data="video_tools:back")
+                ]]),
+            )
             return
 
         lock = await get_user_lock(context, require_effective_user(update).id)
@@ -123,7 +133,7 @@ class VideoToolsHandler:
                 ],
                 [
                     InlineKeyboardButton("🎬 Сжать видео", callback_data="video_tools:compress_video"),
-                    InlineKeyboardButton("❌ Отмена", callback_data="video_tools:cancel"),
+                    InlineKeyboardButton("⬅️ Назад", callback_data="video_tools:back"),
                 ],
             ]
         )
@@ -142,9 +152,11 @@ class VideoToolsHandler:
         await query.answer()
         action = query.data.split(":", 1)[1]
 
-        if action == "cancel":
+        if action in {"cancel", "back"}:
             self._cleanup(context)
-            await message.reply_text("❌ Операция отменена.")
+            from handlers.start import start
+
+            await start(update, context)
             return
 
         file_path = context.user_data.get("video_tools_file")
@@ -302,3 +314,4 @@ class VideoToolsHandler:
 
         context.user_data.pop("video_tools_file", None)
         context.user_data.pop("video_tools_temp_dir", None)
+        context.user_data.pop("video_tools", None)

@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 from database.database import get_history, get_user_settings
 from handlers.settings import show_settings
 from keyboards.main_menu import main_menu
+from keyboards.navigation import back_to_main_menu_keyboard
 from utils.i18n import translate
 from handlers.profile import profile_command
 from handlers.history import history_keyboard
@@ -35,7 +36,10 @@ def get_action(text: str) -> str | None:
 def help_keyboard(language: str, show_news: bool = True):
     label_key = "help_news_button" if show_news else "help_back_button"
     callback = "help:news" if show_news else "help:home"
-    return InlineKeyboardMarkup([[InlineKeyboardButton(translate(language, label_key), callback_data=callback)]])
+    rows = [[InlineKeyboardButton(translate(language, label_key), callback_data=callback)]]
+    if show_news:
+        rows.append([InlineKeyboardButton(translate(language, "back"), callback_data="main_menu")])
+    return InlineKeyboardMarkup(rows)
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = require_message_target(update)
@@ -83,7 +87,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 break
 
-    elif action == "back":
+    elif action == "back" or text == "⬅️ Назад":
         context.user_data.pop("selected_service", None)
         reply = await reply_text_with_retry(
             message,
@@ -96,7 +100,11 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = get_history(user_id)
 
         if not history:
-            reply = await reply_text_with_retry(message, translate(language, "history_empty"))
+            reply = await reply_text_with_retry(
+                message,
+                translate(language, "history_empty"),
+                reply_markup=back_to_main_menu_keyboard(),
+            )
             remember_ui_message(context, reply)
             await delete_button_message(message)
             return

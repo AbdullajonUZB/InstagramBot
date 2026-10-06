@@ -136,11 +136,18 @@ def admin_panel_keyboard(owner: bool = False):
         [InlineKeyboardButton("🩺 Здоровье", callback_data="admin_panel:health")],
         [InlineKeyboardButton("🔔 Напоминания", callback_data="admin_panel:reminders")],
         [InlineKeyboardButton("🔄 Обновить", callback_data="admin_panel:refresh")],
+        [InlineKeyboardButton("⬅️ В главное меню", callback_data="main_menu")],
     ]
     if owner:
         rows.append([InlineKeyboardButton("👥 Администраторы", callback_data="admin_panel:admins")])
         rows.append([InlineKeyboardButton("📣 Уведомить о новинках", callback_data="admin_panel:news")])
     return InlineKeyboardMarkup(rows)
+
+
+def admin_submenu_keyboard():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("⬅️ В админ-панель", callback_data="admin_panel:home")
+    ]])
 
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -193,7 +200,12 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
         return
     action = query.data.split(":", 1)[1]
 
-    if action in {"status", "refresh"}:
+    if action == "home":
+        await query.edit_message_text(
+            "🛠 Админская панель\n\nВыберите действие:",
+            reply_markup=admin_panel_keyboard(is_owner(user_id)),
+        )
+    elif action in {"status", "refresh"}:
         stats = get_admin_dashboard_stats()
         text = (
             "🛠 Dashboard\n\n"
@@ -226,7 +238,7 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
         rows = get_download_stats_by_service()
         text = "📈 Скачивания по сервисам\n\n"
         text += "\n".join(f"• {media_type}: {count}" for media_type, count in rows) or "Данных пока нет."
-        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+        await query.edit_message_text(text[:4000], reply_markup=admin_submenu_keyboard())
     elif action == "users":
         rows = get_recent_users()
         text = "👥 Последние пользователи\n\n"
@@ -238,7 +250,7 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
             )
         else:
             text += "Пользователей пока нет."
-        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+        await query.edit_message_text(text[:4000], reply_markup=admin_submenu_keyboard())
     elif action == "security":
         rows = get_recent_security_events()
         text = "🛡 Последние события безопасности\n\n"
@@ -246,12 +258,12 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
             f"• {created_at} — {telegram_id or '-'} — {event or '-'} {details or ''}"
             for telegram_id, event, details, created_at in rows
         ) or "Событий пока нет."
-        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+        await query.edit_message_text(text[:4000], reply_markup=admin_submenu_keyboard())
     elif action == "health":
         warnings = startup_checks()
         text = "🩺 Состояние бота\n\n✅ Приложение запущено\n"
         text += "\n".join(f"⚠️ {warning}" for warning in warnings) or "✅ Критических предупреждений нет."
-        await query.edit_message_text(text[:4000], reply_markup=admin_panel_keyboard(is_owner(user_id)))
+        await query.edit_message_text(text[:4000], reply_markup=admin_submenu_keyboard())
     elif action == "reminders" and is_owner(user_id):
         await query.edit_message_text(
             _reminders_text(), reply_markup=reminders_keyboard()
@@ -302,7 +314,8 @@ async def handle_admin_news_callback(update: Update, context: ContextTypes.DEFAU
     await query.edit_message_text(
         "📣 Рассылка завершена.\n\n"
         f"✅ Доставлено: {delivered}\n"
-        f"⚠️ Не доставлено: {failed}"
+        f"⚠️ Не доставлено: {failed}",
+        reply_markup=admin_panel_keyboard(is_owner(user_id)),
     )
 
 
@@ -392,9 +405,12 @@ async def handle_admin_management_callback(update: Update, context: ContextTypes
 
     if action == "add":
         context.user_data["admin_management_action"] = "add"
-        await query.message.reply_text(
+        await query.edit_message_text(
             "➕ Отправьте @username пользователя, которого нужно сделать администратором.\n"
-            "Пользователь должен сначала запустить бота."
+            "Пользователь должен сначала запустить бота.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад", callback_data="admin_admins:cancel_add")
+            ]]),
         )
     elif action == "confirm_add" and len(parts) == 3 and parts[2].isdigit():
         new_admin_id = int(parts[2])
@@ -414,6 +430,7 @@ async def handle_admin_management_callback(update: Update, context: ContextTypes
             )
     elif action == "cancel_add":
         context.user_data.pop("pending_admin", None)
+        context.user_data.pop("admin_management_action", None)
         await query.edit_message_text(_admins_text(), reply_markup=admin_management_keyboard())
     elif action == "remove" and len(parts) == 3 and parts[2].isdigit():
         removed_id = int(parts[2])

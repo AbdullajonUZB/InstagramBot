@@ -33,9 +33,20 @@ def download_actions_keyboard(can_convert=False):
     return InlineKeyboardMarkup(
         [
             first_row,
-            [InlineKeyboardButton("❌ Закрыть", callback_data="download_ui:close")],
+            [InlineKeyboardButton("⬅️ В меню", callback_data="download_ui:close")],
         ]
     )
+
+
+def youtube_choice_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🎥 Видео", callback_data="youtube_select:video"),
+            InlineKeyboardButton("🎵 Музыка (MP3)", callback_data="youtube_select:audio"),
+        ],
+        [InlineKeyboardButton("⚙️ Выбрать качество", callback_data="youtube_quality:menu")],
+        [InlineKeyboardButton("⬅️ В меню", callback_data="main_menu")],
+    ])
 
 
 async def delete_download_prompt(update, context):
@@ -128,18 +139,9 @@ async def _handle_message_locked(update, context, message, text):
 
     if selected_service == "youtube":
         context.user_data["pending_youtube_url"] = url
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("🎥 Видео", callback_data="youtube_select:video"),
-                    InlineKeyboardButton("🎵 Музыка (MP3)", callback_data="youtube_select:audio"),
-                ],
-                [InlineKeyboardButton("⚙️ Выбрать качество", callback_data="youtube_quality:menu")],
-            ]
-        )
         await message.reply_text(
             "🎬 Что вы хотите скачать?",
-            reply_markup=keyboard,
+            reply_markup=youtube_choice_keyboard(),
         )
         return
 
@@ -151,6 +153,7 @@ async def _handle_message_locked(update, context, message, text):
                 [InlineKeyboardButton("📥 Эта история", callback_data="instagram_story:one")],
                 [InlineKeyboardButton("📚 Все истории", callback_data="instagram_story:all")],
                 [InlineKeyboardButton("🎬 Только видео", callback_data="instagram_story:video")],
+                [InlineKeyboardButton("⬅️ В меню", callback_data="main_menu")],
             ]),
         )
         return
@@ -258,7 +261,15 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
                 [InlineKeyboardButton("🎞 720p", callback_data="youtube_quality:720"),
                  InlineKeyboardButton("🎞 480p", callback_data="youtube_quality:480")],
                 [InlineKeyboardButton("🖼 Оригинал", callback_data="youtube_quality:original")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="youtube_quality:back")],
             ])
+        )
+        return
+
+    if action == "back":
+        await query.edit_message_text(
+            "🎬 Что вы хотите скачать?",
+            reply_markup=youtube_choice_keyboard(),
         )
         return
 
@@ -369,11 +380,21 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
                     pool_timeout=60,
                 )
             clear_followup_media(context)
-            await query.edit_message_text("✅ MP3 готов.", reply_markup=None)
+            await query.edit_message_text(
+                "✅ MP3 готов.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ В меню", callback_data="main_menu")
+                ]]),
+            )
         except Exception as exc:
             await message.reply_text(f"❌ Не удалось создать MP3: {exc}")
     elif action == "again":
-        await query.edit_message_text("🔗 Отправьте ссылку на видео или публикацию.")
+        await query.edit_message_text(
+            "🔗 Отправьте ссылку на видео или публикацию.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ В меню", callback_data="main_menu")
+            ]]),
+        )
         context.user_data["download_prompt_message_id"] = query.message.message_id
     elif action == "close":
         clear_followup_media(context)

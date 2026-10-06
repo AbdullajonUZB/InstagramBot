@@ -29,6 +29,7 @@ def history_keyboard(history):
             current_row = []
     if current_row:
         rows.append(current_row)
+    rows.append([InlineKeyboardButton("⬅️ В меню", callback_data="main_menu")])
     return InlineKeyboardMarkup(rows) if rows else None
 
 

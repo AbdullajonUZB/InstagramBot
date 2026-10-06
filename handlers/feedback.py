@@ -10,6 +10,7 @@ def feedback_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{rating}⭐", callback_data=f"feedback:rating:{rating}") for rating in range(1, 6)],
         [InlineKeyboardButton("Пропустить", callback_data="feedback:skip")],
+        [InlineKeyboardButton("⬅️ В меню", callback_data="feedback:home")],
     ])
 
 
@@ -29,8 +30,19 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await query.answer()
     user = require_effective_user(update)
+    if query.data == "feedback:home":
+        context.user_data.pop("awaiting_feedback_comment", None)
+        from handlers.start import start
+
+        await start(update, context)
+        return
     if query.data.endswith(":skip"):
-        await query.edit_message_text("Хорошо, спасибо за использование бота!")
+        await query.edit_message_text(
+            "Хорошо, спасибо за использование бота!",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ В меню", callback_data="feedback:home")
+            ]]),
+        )
         return
 
     rating = int(query.data.rsplit(":", 1)[1])
@@ -41,7 +53,10 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⭐ Новая оценка: {rating}/5\n👤 {user.first_name or '-'} (@{user.username or 'без username'}, id={user.id})",
     )
     await query.edit_message_text(
-        "Спасибо за оценку! 💛\n\nЕсли хотите, напишите пару слов — это поможет улучшить бота."
+        "Спасибо за оценку! 💛\n\nЕсли хотите, напишите пару слов — это поможет улучшить бота.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ В меню", callback_data="feedback:home")
+        ]]),
     )
 
 
@@ -57,5 +72,10 @@ async def handle_feedback_comment(update: Update, context: ContextTypes.DEFAULT_
             ADMIN_ID,
             f"💬 Комментарий к оценке\n👤 {user.first_name or '-'} (id={user.id})\n\n{comment[:3000]}",
         )
-    await message.reply_text("Спасибо за отзыв! Он уже отправлен администратору 🙌")
+    await message.reply_text(
+        "Спасибо за отзыв! Он уже отправлен администратору 🙌",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ В меню", callback_data="main_menu")
+        ]]),
+    )
     return True
