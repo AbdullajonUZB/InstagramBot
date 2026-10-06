@@ -65,6 +65,9 @@ class InstagramDownloader(BaseDownloader):
     def __init__(self, url: str, logger=None, temp_root=None):
         super().__init__(url=url, logger=logger, temp_root=temp_root)
 
+    def is_expected_download_error(self, error: Exception) -> bool:
+        return "no video formats found" in str(error).lower()
+
     async def _ensure_telegram_compatible_video(self, file_path: Path) -> Path:
         """Transcode only non-H.264 video streams to Telegram-safe MP4."""
         ffprobe = shutil.which("ffprobe") or shutil.which("ffprobe.exe")

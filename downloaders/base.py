@@ -37,6 +37,10 @@ class BaseDownloader(ABC):
         self.temp_dir = None
         self.last_info = None
 
+    def is_expected_download_error(self, error: Exception) -> bool:
+        """Allow a downloader to classify handled fallback conditions as non-errors."""
+        return False
+
     def prepare_temp_dir(self) -> Path:
         self.temp_root.mkdir(parents=True, exist_ok=True)
         self.temp_dir = Path(tempfile.mkdtemp(prefix="instagram_bot_", dir=self.temp_root))
@@ -74,7 +78,9 @@ class BaseDownloader(ABC):
                 self.last_info = info
                 downloaded_file = Path(ydl.prepare_filename(info))
         except Exception as error:
-            if is_transient_download_error(error):
+            if self.is_expected_download_error(error):
+                self.logger.info("Download needs a supported-media fallback: %s", error)
+            elif is_transient_download_error(error):
                 self.logger.warning("Temporary network failure downloading %s: %s", self.url, error)
             else:
                 self.logger.exception("Failed to download media from %s", self.url)
