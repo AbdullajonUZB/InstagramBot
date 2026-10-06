@@ -197,6 +197,7 @@ class InstagramDownloader(BaseDownloader):
         user = require_effective_user(update)
         media_items = []
         opened_files = []
+        caption = t(user.id, "instagram_stories" if is_story else "instagram_carousel")
         try:
             for file_path in files:
                 if file_path.stat().st_size > MAX_FILE_SIZE:
@@ -210,15 +211,21 @@ class InstagramDownloader(BaseDownloader):
                         return False
                     handle = file_path.open("rb")
                     opened_files.append(handle)
-                    media_items.append(InputMediaVideo(media=handle, supports_streaming=True))
+                    media_items.append(InputMediaVideo(
+                        media=handle,
+                        supports_streaming=True,
+                        caption=caption if not media_items else None,
+                    ))
                 elif extension in {".jpg", ".jpeg", ".png", ".webp"}:
                     handle = file_path.open("rb")
                     opened_files.append(handle)
-                    media_items.append(InputMediaPhoto(media=handle))
+                    media_items.append(InputMediaPhoto(
+                        media=handle,
+                        caption=caption if not media_items else None,
+                    ))
 
             if not media_items:
                 return False
-            media_items[0].caption = t(user.id, "instagram_stories" if is_story else "instagram_carousel")
             for start in range(0, len(media_items), 10):
                 await message.reply_media_group(media=media_items[start:start + 10])
         finally:
