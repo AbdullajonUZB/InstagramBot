@@ -6,9 +6,11 @@ import shutil
 import subprocess
 from urllib.parse import urlsplit
 from pathlib import Path
+from urllib.request import Request
 
 from telegram import InputMediaPhoto, InputMediaVideo, Update
 from telegram.ext import ContextTypes
+from yt_dlp import YoutubeDL
 
 from config import MAX_FILE_SIZE
 from database.database import (
@@ -101,6 +103,95 @@ class InstagramDownloader(BaseDownloader):
         file_path.unlink(missing_ok=True)
         return output_path
 
+    def _download_photo_post_fallback(self, ydl_options: dict) -> Path:
+        """Fetch image entries directly and let yt-dlp download any video entries."""
+        if self.temp_dir is None:
+            raise RuntimeError("Instagram temporary directory was not initialized")
+
+        options = {
+            **ydl_options,
+            "outtmpl": str(self.temp_dir / "instagram_%(id)s_%(playlist_index)s.%(ext)s"),
+            "ignore_no_formats_error": True,
+        }
+        image_count = 0
+        with YoutubeDL(options) as ydl:
+            info = ydl.extract_info(self.url, download=False)
+            if not info:
+                raise RuntimeError("Instagram did not return post media metadata")
+
+            entries = list(info.get("entries") or [info])
+            video_entries = []
+            photo_entries = []
+            for entry in entries:
+                if not entry:
+                    continue
+                formats = entry.get("formats") or []
+                has_video = any(
+                    media_format.get("vcodec") not in (None, "none")
+                    for media_format in formats
+                ) or entry.get("duration") is not None
+                if has_video:
+                    video_entries.append(entry)
+                elif entry.get("thumbnails"):
+                    photo_entries.append(entry)
+
+            for index, entry in enumerate(photo_entries, start=1):
+                thumbnails = [
+                    thumb for thumb in entry.get("thumbnails", [])
+                    if thumb.get("url")
+                ]
+                if not thumbnails:
+                    continue
+                image = max(
+                    thumbnails,
+                    key=lambda thumb: (thumb.get("width") or 0) * (thumb.get("height") or 0),
+                )
+                request = Request(
+                    image["url"],
+                    headers=entry.get("http_headers") or {
+                        "Referer": "https://www.instagram.com/",
+                    },
+                )
+                try:
+                    with ydl.urlopen(request) as response:
+                        content_type = response.headers.get("Content-Type", "").lower()
+                        suffix = ".webp" if "image/webp" in content_type else ".jpg"
+                        image_path = self.temp_dir / f"instagram_photo_{index:03d}{suffix}"
+                        with image_path.open("wb") as image_file:
+                            shutil.copyfileobj(response, image_file)
+                    if image_path.stat().st_size:
+                        image_count += 1
+                except Exception as error:
+                    self.logger.warning("Could not download Instagram photo %s: %s", index, error)
+
+            if video_entries:
+                video_playlist = {
+                    **{key: value for key, value in info.items() if key != "entries"},
+                    "_type": "playlist",
+                    "entries": video_entries,
+                }
+                ydl.process_ie_result(video_playlist, download=True)
+
+        files = self.get_downloaded_media_files()
+        if not files:
+            raise RuntimeError("Instagram post did not contain downloadable photos or videos")
+        self.logger.info(
+            "Instagram photo fallback completed: %s photos and %s media files",
+            image_count,
+            len(files),
+        )
+        return max(files, key=lambda path: path.stat().st_size)
+
+    def _clear_partial_downloads(self):
+        """Remove only this downloader's incomplete files before fallback extraction."""
+        if self.temp_dir is None:
+            return
+        for path in self.temp_dir.iterdir():
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink(missing_ok=True)
+
     async def _send_carousel(self, update: Update, files: list[Path], is_story: bool = False) -> bool:
         message = require_message_target(update)
         user = require_effective_user(update)
@@ -183,6 +274,17 @@ class InstagramDownloader(BaseDownloader):
                     break
                 except Exception as error:
                     last_download_error = error
+                    if "no video formats found" in str(error).lower():
+                        logger.info(
+                            "Instagram post has photo entries without video streams; "
+                            "retrying with photo-aware extraction"
+                        )
+                        self._clear_partial_downloads()
+                        filename = await asyncio.to_thread(
+                            self._download_photo_post_fallback,
+                            ydl_opts,
+                        )
+                        break
                     if not is_transient_instagram_error(error) or attempt == 2:
                         raise
                     delay = 2 ** attempt
