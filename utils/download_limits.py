@@ -7,6 +7,9 @@ from utils.message_utils import get_message_target
 async def ensure_download_allowed(update: Update) -> bool:
     """Register the user and show the limit prompt when no quota remains."""
     user = update.effective_user
+    if user is None:
+        return False
+
     register_user(user.id, user.username, user.first_name)
 
     if can_download(user.id):

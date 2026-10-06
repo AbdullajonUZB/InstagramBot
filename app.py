@@ -11,6 +11,7 @@ from config import (
     BOT_TOKEN,
     TELEGRAM_CONNECT_TIMEOUT,
     TELEGRAM_GET_UPDATES_READ_TIMEOUT,
+    TELEGRAM_LOCAL_API_URL,
     TELEGRAM_POOL_TIMEOUT,
     TELEGRAM_READ_TIMEOUT,
     TELEGRAM_WRITE_TIMEOUT,
@@ -68,6 +69,10 @@ logger.info("Initializing Instagram Downloader...")
 video_tools_handler = VideoToolsHandler()
 
 
+async def handle_youtube_choice_callback(update, context):
+    await handle_youtube_choice(update, context)
+
+
 async def application_post_init(application):
     await reminder_post_init(application)
     await start_web_app_server(application)
@@ -94,9 +99,17 @@ def main():
 
     # Handlers await long-running downloads; process different users' updates
     # concurrently instead of waiting for one update to finish first.
+    app_builder = Application.builder().token(BOT_TOKEN)
+    if TELEGRAM_LOCAL_API_URL:
+        app_builder = (
+            app_builder
+            .base_url(f"{TELEGRAM_LOCAL_API_URL}/bot")
+            .base_file_url(f"{TELEGRAM_LOCAL_API_URL}/file/bot")
+        )
+        logger.info("Using local Telegram Bot API at %s", TELEGRAM_LOCAL_API_URL)
+
     app = (
-        Application.builder()
-        .token(BOT_TOKEN)
+        app_builder
         .connect_timeout(TELEGRAM_CONNECT_TIMEOUT)
         .read_timeout(TELEGRAM_READ_TIMEOUT)
         .write_timeout(TELEGRAM_WRITE_TIMEOUT)
@@ -177,7 +190,10 @@ def main():
         CallbackQueryHandler(handle_admin_management_callback, pattern=r"^admin_admins:")
     )
     app.add_handler(
-        CallbackQueryHandler(handle_youtube_choice, pattern=r"^youtube_select:")
+        CallbackQueryHandler(
+            handle_youtube_choice_callback,
+            pattern=r"^youtube_select:",
+        )
     )
     app.add_handler(
         CallbackQueryHandler(handle_youtube_quality_callback, pattern=r"^youtube_quality:")

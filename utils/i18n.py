@@ -127,10 +127,14 @@ TRANSLATIONS = {
 
 
 def translate(language, key, **kwargs):
-    text = TRANSLATIONS.get(language, TRANSLATIONS["ru"]).get(key, key)
+    locale = TRANSLATIONS.get(language) or TRANSLATIONS["ru"]
+    text = locale.get(key, key)
+    if text is None:
+        text = key
     return text.format(**kwargs)
 
 
 def t(user_id, key, **kwargs):
-    language = get_user_settings(user_id)["language"]
+    settings = get_user_settings(user_id) or {}
+    language = settings.get("language") or "ru"
     return translate(language, key, **kwargs)

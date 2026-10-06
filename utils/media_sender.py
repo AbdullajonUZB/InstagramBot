@@ -13,6 +13,8 @@ async def send_video(update, filename, video_caption, document_caption=None):
 
         settings = get_user_settings(update.effective_user.id)
         message = get_message_target(update)
+        if message is None:
+            raise ValueError("No valid message target found to send media.")
 
         # Отправка как документ
         if settings["send_format"] == "document":

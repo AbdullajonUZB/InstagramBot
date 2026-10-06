@@ -24,10 +24,13 @@ def _display_name(first_name, username):
 async def send_inactive_user_reminders(application):
     if get_bot_setting("reminders_enabled", "1") != "1":
         return
+
+    reminder_after_days = get_bot_setting("reminder_after_days", "7")
     try:
-        after_days = max(1, int(get_bot_setting("reminder_after_days", "7")))
+        after_days = max(1, int(reminder_after_days or 7))
     except (TypeError, ValueError):
         after_days = 7
+
     for telegram_id, first_name, username in get_inactive_users(after_days, REMINDER_BATCH_SIZE):
         text = (
             f"👋 {_display_name(first_name, username)}, мы по вам соскучились!\n\n"

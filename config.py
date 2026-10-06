@@ -1,5 +1,7 @@
+import ipaddress
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,6 +11,29 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN не найден в .env")
+
+# Оставьте пустым для облачного Bot API. Для локального сервера задайте, например,
+# TELEGRAM_LOCAL_API_URL=http://127.0.0.1:8082
+TELEGRAM_LOCAL_API_URL = os.getenv("TELEGRAM_LOCAL_API_URL", "").strip().rstrip("/")
+if TELEGRAM_LOCAL_API_URL:
+    _local_api_parts = urlsplit(TELEGRAM_LOCAL_API_URL)
+    try:
+        _is_loopback = _local_api_parts.hostname == "localhost" or ipaddress.ip_address(
+            _local_api_parts.hostname or ""
+        ).is_loopback
+        _local_api_parts.port  # проверяем, что порт в URL задан корректно
+    except ValueError:
+        _is_loopback = False
+    if (
+        _local_api_parts.scheme != "http"
+        or not _local_api_parts.netloc
+        or _local_api_parts.path
+        or not _is_loopback
+    ):
+        raise RuntimeError(
+            "TELEGRAM_LOCAL_API_URL должен быть локальным HTTP-адресом, например "
+            "http://127.0.0.1:8082"
+        )
 
 
 def _env_int(name: str, default: int) -> int:

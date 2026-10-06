@@ -8,6 +8,7 @@
             "program": "${workspaceFolder}/app.py",
             "python": "${workspaceFolder}/.venv/Scripts/python.exe",
             "cwd": "${workspaceFolder}",
+            "preLaunchTask": "InstagramBot: запуск локального Bot API",
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.env",
             "justMyCode": true
