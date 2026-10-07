@@ -37,6 +37,15 @@ async def security_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _stop_update(update, "🚫 Доступ к боту ограничен.")
         raise ApplicationHandlerStop
 
+    # Inline queries have no chat message to reply to, and Telegram sends
+    # frequent updates while a user is typing. Keep bans/registration, but do
+    # not apply the ordinary message cooldown/flood limiter to them.
+    if update.inline_query is not None:
+        query = update.inline_query.query or ""
+        if len(query) > MAX_URL_LENGTH:
+            raise ApplicationHandlerStop
+        return
+
     now = time.monotonic()
     data = context.application.bot_data
     last_updates = data.setdefault("security_last_update", {})

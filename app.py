@@ -7,6 +7,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     MessageHandler,
+    InlineQueryHandler,
     TypeHandler,
     filters,
 )
@@ -62,6 +63,7 @@ from handlers.video_tools import VideoToolsHandler
 from utils.download_queue import cancel_queued_download
 from handlers.feedback import feedback_callback
 from handlers.web_app import handle_web_app_data
+from handlers.inline import handle_inline_query
 from keyboards.navigation import delete_message_callback
 from utils.logger import logger
 from utils.security import security_guard
@@ -136,6 +138,7 @@ def main():
     )
 
     app.add_handler(TypeHandler(Update, security_guard), group=-2)
+    app.add_handler(InlineQueryHandler(handle_inline_query), group=0)
     app.add_handler(
         MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data),
         group=0,
