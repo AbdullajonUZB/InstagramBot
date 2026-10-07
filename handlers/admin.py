@@ -502,7 +502,10 @@ def _admin_downloads_keyboard(page: int, service: str, user_id: int | None, tota
     service_buttons = []
     for key, label in DOWNLOAD_SERVICE_FILTERS.items():
         caption = f"✅ {label}" if key == service else label
-        service_buttons.append(InlineKeyboardButton(caption, callback_data=f"admin_downloads:filter:{key}"))
+        service_buttons.append(InlineKeyboardButton(
+            caption,
+            callback_data=f"admin_downloads:filter:{key}:{user_id or 0}",
+        ))
         if len(service_buttons) == 2:
             rows.append(service_buttons)
             service_buttons = []
@@ -550,7 +553,7 @@ async def _show_admin_downloads(
             if registered:
                 summary_text += f"\nРегистрация: {escape(str(registered))}"
         else:
-            user_id = None
+            summary_text = f"\n\n👤 ID <code>{user_id}</code> · карточка пользователя не найдена"
 
     service_filter = None if service == "all" else service
     requested_page = page
@@ -649,6 +652,8 @@ async def handle_admin_downloads_callback(update: Update, context: ContextTypes.
         page, service, selected_user = 0, "all", None
         if action == "filter" and len(parts) > 2:
             service = parts[2]
+            if len(parts) > 3 and parts[3].isdigit() and int(parts[3]) > 0:
+                selected_user = int(parts[3])
         elif action == "page" and len(parts) > 2:
             try:
                 page = max(0, int(parts[2]))

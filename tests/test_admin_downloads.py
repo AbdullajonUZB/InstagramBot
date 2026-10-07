@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from database import database
+from handlers.admin import _admin_downloads_keyboard
 
 
 class AdminDownloadJournalTests(unittest.TestCase):
@@ -39,6 +40,12 @@ class AdminDownloadJournalTests(unittest.TestCase):
         first_page, total = database.get_admin_downloads_page(page=0, limit=10)
         second_page, _ = database.get_admin_downloads_page(page=1, limit=10)
         self.assertEqual((len(first_page), len(second_page), total), (10, 1, 11))
+
+    def test_service_filter_buttons_keep_selected_user(self):
+        markup = _admin_downloads_keyboard(page=0, service="all", user_id=1083027922, total=3)
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        self.assertIn("admin_downloads:filter:youtube:1083027922", callbacks)
+        self.assertIn("admin_downloads:filter:instagram:1083027922", callbacks)
 
 
 if __name__ == "__main__":
