@@ -92,7 +92,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await reply_text_with_retry(
             message,
             translate(language, "main_menu"),
-            reply_markup=main_menu(language),
+            reply_markup=main_menu(language, include_admin=is_admin(user_id)),
         )
         remember_ui_message(context, reply)
 

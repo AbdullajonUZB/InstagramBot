@@ -15,16 +15,17 @@ def main_menu(language="ru", include_admin: bool = False):
         ],
         [
             "🎵 Видео → MP3",
-        ],
-        [
             translate(language, "history"),
-            translate(language, "settings"),
         ],
         [
+            translate(language, "settings"),
             translate(language, "help"),
-            "💎 Купить Premium",
         ],
     ]
+    if include_admin:
+        keyboard.append(["💎 Купить Premium", "🛠 Админ-панель"])
+    else:
+        keyboard.append(["💎 Купить Premium"])
     app_url = urlsplit(WEB_APP_URL)
     if app_url.scheme == "https" and app_url.hostname:
         keyboard.append([
