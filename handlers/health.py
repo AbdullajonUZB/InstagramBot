@@ -9,7 +9,7 @@ from database.database import get_admin_stats
 from utils.message_utils import require_effective_user, require_message_target
 from utils.admin_roles import is_admin
 from utils.health_checks import collect_service_pings, format_service_ping
-from utils.bot_profile import format_uptime
+from utils.uptime import format_uptime
 
 
 async def health_report_text(application=None):

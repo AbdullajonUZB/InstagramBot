@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from handlers.health import health_report_text
 from utils.health_checks import format_service_ping
+from utils.uptime import format_uptime
 
 
 class HealthCheckFormattingTests(unittest.TestCase):
@@ -14,6 +15,11 @@ class HealthCheckFormattingTests(unittest.TestCase):
 
     def test_unavailable_service_is_marked(self):
         self.assertEqual(format_service_ping("Instagram", None), "🔴 Instagram: нет соединения")
+
+    def test_uptime_formatting(self):
+        self.assertEqual(format_uptime(65), "1 мин.")
+        self.assertEqual(format_uptime(3661), "1 ч. 1 мин.")
+        self.assertEqual(format_uptime(90061), "1 дн. 1 ч. 1 мин.")
 
     def test_health_report_includes_server_uptime_and_download_queue(self):
         async def scenario():
