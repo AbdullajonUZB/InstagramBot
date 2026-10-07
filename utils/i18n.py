@@ -3,7 +3,7 @@ from database.database import get_user_settings
 
 TRANSLATIONS = {
     "ru": {
-        "welcome": "✨ Добро пожаловать в Media Downloader!\n\nСкачивайте видео, фото и музыку из Instagram, YouTube, Pinterest и Facebook.\n\n🔗 Просто отправьте ссылку — я быстро подготовлю файл для вас.\n\n👇 Выберите нужное действие в меню.",
+        "welcome": "✨ Добро пожаловать в Media Downloader!\n\n📥 Instagram, YouTube, Pinterest и Facebook: видео и фото; YouTube — MP3. Просто отправьте ссылку.\n\n🕒 График: ежедневно 08:00–00:00 по Ташкенту (16 часов в день).\n🏠 Бот работает на домашнем компьютере, а не на круглосуточном сервере. Ночью и во время обновлений он недоступен; сообщения, отправленные в это время, бот обработать не сможет.\n\n⚠️ Скачивание зависит от доступности публикации и ограничений платформы. Выберите действие в меню ниже.",
         "download": "📥 Скачать",
         "open_app": "📱 Открыть приложение",
         "history": "📜 История",
@@ -71,7 +71,7 @@ TRANSLATIONS = {
         "pinterest_error": "❌ Ошибка при скачивании медиа с Pinterest.",
     },
     "uz": {
-        "welcome": "✨ Media Downloader’ga xush kelibsiz!\n\nInstagram, YouTube, Pinterest va Facebook’dan video, surat hamda musiqa yuklab oling.\n\n🔗 Havolani yuboring — men faylni tezda tayyorlab beraman.\n\n👇 Menyudan kerakli amalni tanlang.",
+        "welcome": "✨ Media Downloader’ga xush kelibsiz!\n\n📥 Instagram, YouTube, Pinterest va Facebook’dan video va suratlar; YouTube’dan MP3 yuklab oling. Havolani yuboring.\n\n🕒 Ish vaqti: har kuni Toshkent vaqti bilan 08:00–00:00 (kuniga 16 soat).\n🏠 Bot doimiy serverda emas, uy kompyuterida ishlaydi. Tunda va yangilanish vaqtida u ishlamaydi; shu vaqtda yuborilgan xabarlarni bot qayta ishlay olmaydi.\n\n⚠️ Yuklab olish imkoniyati havola va platforma cheklovlariga bog‘liq. Quyidagi menyudan amalni tanlang.",
         "download": "📥 Yuklab olish", "history": "📜 Tarix", "settings": "⚙ Sozlamalar", "help": "ℹ️ Yordam", "back": "⬅️ Orqaga",
         "open_app": "📱 Ilovani ochish", "choose_service": "📥 Ijtimoiy tarmoqni tanlang.", "unsupported_tiktok": "⚠️ TikTok hozir qo‘llab-quvvatlanmaydi. Instagram, YouTube, Pinterest yoki Facebook havolasini yuboring.", "send_service_link": "🔗 {service} havolasini yuboring.", "main_menu": "Bosh menyu.",
         "history_empty": "📜 Tarix bo'sh.", "history_title": "📜 Oxirgi yuklab olishlar:\n\n",
@@ -97,7 +97,7 @@ TRANSLATIONS = {
         "instagram_error": "❌ Instagram dan yuklab olishda xatolik.", "youtube_error": "❌ YouTube videosini yuklab olishda xatolik.", "pinterest_error": "❌ Pinterest mediasini yuklab olishda xatolik.",
     },
     "en": {
-        "welcome": "✨ Welcome to Media Downloader!\n\nDownload videos, photos, and music from Instagram, YouTube, Pinterest, and Facebook.\n\n🔗 Just send a link — I’ll quickly prepare the file for you.\n\n👇 Choose an action from the menu.",
+        "welcome": "✨ Welcome to Media Downloader!\n\n📥 Videos and photos from Instagram, YouTube, Pinterest, and Facebook; MP3 from YouTube. Just send a link.\n\n🕒 Schedule: daily, 08:00–00:00 Tashkent time (16 hours a day).\n🏠 The bot runs on a home computer, not a 24/7 server. It is unavailable overnight and during updates; messages sent while it is offline cannot be processed.\n\n⚠️ Downloads depend on link availability and platform restrictions. Choose an action from the menu below.",
         "download": "📥 Download", "open_app": "📱 Open app", "history": "📜 History", "settings": "⚙ Settings", "help": "ℹ️ Help", "back": "⬅️ Back",
         "choose_service": "📥 Choose a social network.", "unsupported_tiktok": "⚠️ TikTok is currently unsupported. Send a link from Instagram, YouTube, Pinterest, or Facebook.", "send_service_link": "🔗 Send a {service} link.", "main_menu": "Main menu.",
         "history_empty": "📜 History is empty.", "history_title": "📜 Recent downloads:\n\n",
