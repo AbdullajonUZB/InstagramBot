@@ -1,6 +1,7 @@
 from datetime import datetime
 import asyncio
 from html import escape
+import re
 import sqlite3
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -306,9 +307,12 @@ async def _show_admin_audit(query, page: int = 0, user_id: int | None = None):
     if page >= 0 and not records and total and page:
         page = last_page
         records, total = get_admin_audit_page(page, 10, user_id)
-    lines = ["🛡 <b>Журнал действий с аккаунтами</b>"]
-    lines.append(f"Фильтр по пользователю: <code>{user_id}</code>" if user_id else "Фильтр: все пользователи")
-    lines.append(f"Записей: {total} · Страница {page + 1}/{last_page + 1}\n")
+    lines = [
+        "🛡 <b>Действия администраторов</b>",
+        "Здесь сохраняются изменения Premium, блокировки и назначения администраторов.",
+        f"Фильтр: пользователь <code>{user_id}</code>" if user_id else "Фильтр: все пользователи",
+        f"Всего записей: {total} · Страница {page + 1}/{last_page + 1}\n",
+    ]
     labels = {
         "PREMIUM_GRANTED": "⭐ Premium выдан/продлён",
         "PREMIUM_REVOKED": "⭐ Premium отключён",
@@ -318,15 +322,30 @@ async def _show_admin_audit(query, page: int = 0, user_id: int | None = None):
         "ADMIN_REMOVED": "👮 Администратор снят",
     }
     for target, username, first_name, action, details, actor, created in records:
-        identity = f"{escape(first_name or username or 'Без имени')} · ID <code>{target}</code>"
+        identity = f"{escape(first_name or username or 'Без имени')} · <code>{target}</code>"
         if username:
             identity += f" · @{escape(username)}"
-        lines.append(
-            f"<b>{escape(str(created or ''))}</b> — {labels.get(action, escape(str(action)))}\n"
-            f"👤 {identity}\n🛠 Администратор: <code>{actor or 'не указан'}</code>"
-        )
+        actor_profile = get_user_profile(actor) if actor else None
+        actor_name = (actor_profile[0] or actor_profile[1]) if actor_profile else None
+        actor_label = escape(actor_name or str(actor or "не указан"))
+        if actor:
+            actor_label = f'<a href="tg://user?id={actor}">{actor_label}</a>'
+        detail_text = ""
         if details:
-            lines.append(escape(str(details)[:250]))
+            raw_details = str(details)
+            raw_details = re.sub(rf"^Администратор\s+{actor}\s+", "", raw_details) if actor else raw_details
+            premium_info = re.search(r"Premium на (\d+) дней; до (.+)$", raw_details)
+            if premium_info:
+                detail_text = f"Срок: {premium_info.group(1)} дн. · до {premium_info.group(2)}"
+            elif action == "USER_BANNED" and raw_details:
+                detail_text = f"Причина: {raw_details}"
+        lines.append(
+            f"📅 <b>{escape(str(created or ''))}</b>\n"
+            f"{labels.get(action, 'Действие')}\n"
+            f"👤 Пользователь: {identity}\n🛠 Кто выполнил: {actor_label}"
+        )
+        if detail_text:
+            lines.append(escape(detail_text[:180]))
         lines.append("")
     if not records:
         lines.append("Записей пока нет.")
