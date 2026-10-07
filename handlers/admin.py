@@ -279,7 +279,6 @@ DOWNLOAD_SERVICE_FILTERS = {
     "all": "Все сервисы",
     "instagram": "Instagram",
     "youtube": "YouTube",
-    "tiktok": "TikTok",
     "facebook": "Facebook",
     "pinterest": "Pinterest",
 }

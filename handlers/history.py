@@ -3,7 +3,6 @@ from telegram.ext import ContextTypes
 
 import downloaders.instagram
 import downloaders.pinterest
-import downloaders.tiktok
 import downloaders.youtube
 from database.database import get_history_item
 from services import SERVICES, extract_service_link

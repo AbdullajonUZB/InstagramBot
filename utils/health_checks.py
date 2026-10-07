@@ -9,7 +9,6 @@ from config import TELEGRAM_LOCAL_API_URL
 SERVICE_HOSTS = (
     ("Instagram", "www.instagram.com"),
     ("YouTube", "www.youtube.com"),
-    ("TikTok", "www.tiktok.com"),
     ("Pinterest", "www.pinterest.com"),
     ("Facebook", "www.facebook.com"),
 )

@@ -19,7 +19,6 @@ class RoutingTests(unittest.TestCase):
         cases = {
             "instagram": "https://www.instagram.com/reel/abc123/",
             "youtube": "https://youtu.be/abc123",
-            "tiktok": "https://www.tiktok.com/@user/video/123",
             "pinterest": "https://pin.it/abc123",
             "facebook": "https://www.facebook.com/watch/?v=123",
         }
@@ -28,6 +27,9 @@ class RoutingTests(unittest.TestCase):
                 service, detected_url = extract_service_link(f"Ссылка: {url}.")
                 self.assertEqual(service, expected_service)
                 self.assertEqual(detected_url, url)
+
+    def test_tiktok_is_disabled_as_an_unsupported_service(self):
+        self.assertEqual(extract_service_link("https://www.tiktok.com/@user/video/123"), (None, None))
 
     def test_instagram_story_urls(self):
         self.assertTrue(is_instagram_story_url("https://www.instagram.com/stories/user/123/"))

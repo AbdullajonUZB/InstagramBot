@@ -6,7 +6,6 @@ from telegram.ext import ContextTypes
 
 import downloaders.instagram
 import downloaders.pinterest
-import downloaders.tiktok
 import downloaders.youtube
 from downloaders.instagram import is_instagram_story_url
 from keyboards.main_menu import service_menu
@@ -90,6 +89,9 @@ async def _handle_message_locked(update, context, message, text):
     if detected_service:
         selected_service = detected_service
         url = detected_url
+    elif "tiktok.com" in text.lower():
+        await message.reply_text(translate(language, "unsupported_tiktok"))
+        return
     elif not selected_service:
         try:
             await notify_admin_user_message(context, update, text)

@@ -8,7 +8,6 @@
   const services = [
     ["Instagram", ["instagram.com"]],
     ["YouTube", ["youtube.com", "youtu.be"]],
-    ["TikTok", ["tiktok.com"]],
     ["Pinterest", ["pinterest.com", "pin.it"]],
     ["Facebook", ["facebook.com", "fb.watch"]],
   ];
