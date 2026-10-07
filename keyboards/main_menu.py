@@ -11,21 +11,21 @@ def main_menu(language="ru", include_admin: bool = False):
     keyboard = [
         [
             translate(language, "download"),
-            "👤 Профиль",
-        ],
-        [
-            "🎵 Видео → MP3",
             translate(language, "history"),
         ],
         [
+            "🎵 Видео → MP3",
+            "👤 Профиль",
+        ],
+        [
+            "💎 Купить Premium",
             translate(language, "settings"),
-            translate(language, "help"),
         ],
     ]
     if include_admin:
-        keyboard.append(["💎 Купить Premium", "🛠 Админ-панель"])
+        keyboard.append([translate(language, "help"), "🛠 Админ-панель"])
     else:
-        keyboard.append(["💎 Купить Premium"])
+        keyboard.append([translate(language, "help")])
     app_url = urlsplit(WEB_APP_URL)
     if app_url.scheme == "https" and app_url.hostname:
         keyboard.append([

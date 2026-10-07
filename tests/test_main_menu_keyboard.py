@@ -13,10 +13,16 @@ class MainMenuKeyboardTests(unittest.TestCase):
         self.assertIn("💎 Купить Premium", admin_buttons)
 
     def test_main_menu_actions_are_arranged_in_compact_rows(self):
-        rows = main_menu("ru", include_admin=True).keyboard
-        text_rows = [[button.text for button in row] for row in rows]
-        self.assertTrue(all(len(row) == 2 for row in text_rows[:-1]))
-        self.assertEqual(text_rows[-1], ["💎 Купить Premium", "🛠 Админ-панель"])
+        admin_rows = [[button.text for button in row] for row in main_menu("ru", include_admin=True).keyboard]
+        user_rows = [[button.text for button in row] for row in main_menu("ru").keyboard]
+
+        self.assertEqual(admin_rows, [
+            ["📥 Скачать", "📜 История"],
+            ["🎵 Видео → MP3", "👤 Профиль"],
+            ["💎 Купить Premium", "⚙ Настройки"],
+            ["ℹ️ Помощь", "🛠 Админ-панель"],
+        ])
+        self.assertEqual(user_rows[-1], ["ℹ️ Помощь"])
 
 
 if __name__ == "__main__":
