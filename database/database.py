@@ -210,6 +210,7 @@ def create_database():
         _ensure_column(conn, "users", "language_code", "TEXT")
         _ensure_column(conn, "users", "bonus_downloads_remaining", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "users", "referral_eligible", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "users", "hidden_from_admin", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "security_log", "actor_id", "INTEGER")
         cursor.execute(
             """
@@ -1100,11 +1101,50 @@ def get_recent_users(limit: int = 10):
             SELECT telegram_id, username, first_name, is_premium,
                    downloads_today, registered_at
             FROM users
+            WHERE COALESCE(hidden_from_admin, 0) = 0
             ORDER BY COALESCE(registered_at, '') DESC, telegram_id DESC
             LIMIT ?
             """,
             (limit,),
         ).fetchall()
+
+
+def get_hidden_users(limit: int = 50):
+    with connect() as conn:
+        return conn.execute(
+            """SELECT telegram_id, username, first_name, is_premium, downloads_today, registered_at
+               FROM users WHERE hidden_from_admin = 1
+               ORDER BY COALESCE(registered_at, '') DESC, telegram_id DESC LIMIT ?""",
+            (min(100, max(1, int(limit))),),
+        ).fetchall()
+
+
+def is_user_hidden(telegram_id: int) -> bool:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(hidden_from_admin, 0) FROM users WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone()
+    return bool(row and row[0])
+
+
+def set_user_hidden(telegram_id: int, hidden: bool, actor_id: int) -> bool:
+    """Hide or restore a user in the admin list without deleting their data."""
+    action = "ADMIN_USER_HIDDEN" if hidden else "ADMIN_USER_UNHIDDEN"
+    with connect() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET hidden_from_admin = ? WHERE telegram_id = ?",
+            (int(hidden), telegram_id),
+        )
+        if cursor.rowcount:
+            username, first_name = conn.execute(
+                "SELECT username, first_name FROM users WHERE telegram_id = ?", (telegram_id,)
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO security_log(telegram_id, username, first_name, action, details, actor_id) VALUES (?, ?, ?, ?, '', ?)",
+                (telegram_id, username, first_name, action, actor_id),
+            )
+        return cursor.rowcount > 0
 
 
 def get_registered_user_ids():
@@ -1147,7 +1187,7 @@ def get_recent_security_events(limit: int = 15):
 
 ADMIN_AUDIT_ACTIONS = (
     "PREMIUM_GRANTED", "PREMIUM_REVOKED", "USER_BANNED", "USER_UNBANNED",
-    "ADMIN_ADDED", "ADMIN_REMOVED",
+    "ADMIN_ADDED", "ADMIN_REMOVED", "ADMIN_USER_HIDDEN", "ADMIN_USER_UNHIDDEN",
 )
 
 

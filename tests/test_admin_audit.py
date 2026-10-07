@@ -32,6 +32,20 @@ class AdminAuditTests(unittest.TestCase):
         self.assertEqual([row[5] for row in rows], [703, 702, 701, 700])
         self.assertEqual(database.get_admin_audit_page(user_id=999)[1], 0)
 
+    def test_hiding_user_preserves_profile_and_can_be_reversed(self):
+        database.add_history(901, "https://instagram.com/p/example", "Instagram видео")
+
+        self.assertTrue(database.set_user_hidden(901, True, 700))
+        self.assertNotIn(901, [row[0] for row in database.get_recent_users(20)])
+        self.assertEqual(database.get_hidden_users(20)[0][0], 901)
+        self.assertTrue(database.is_user_hidden(901))
+        self.assertEqual(database.get_user_profile(901)[0], "Target")
+        self.assertEqual(len(database.get_history(901)), 1)
+
+        self.assertTrue(database.set_user_hidden(901, False, 700))
+        self.assertIn(901, [row[0] for row in database.get_recent_users(20)])
+        self.assertFalse(database.is_user_hidden(901))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -31,6 +31,10 @@ from database.database import (
     get_bot_admins,
     get_download_stats_by_service,
     get_recent_users,
+    get_hidden_users,
+    is_user_hidden,
+    set_user_hidden,
+    is_user_banned,
     get_recent_security_events,
     get_registered_user_ids,
     get_user_by_username,
@@ -320,6 +324,8 @@ async def _show_admin_audit(query, page: int = 0, user_id: int | None = None):
         "USER_UNBANNED": "✅ Пользователь разблокирован",
         "ADMIN_ADDED": "👮 Администратор добавлен",
         "ADMIN_REMOVED": "👮 Администратор снят",
+        "ADMIN_USER_HIDDEN": "🙈 Пользователь скрыт из списка",
+        "ADMIN_USER_UNHIDDEN": "👁 Пользователь возвращён в список",
     }
     for target, username, first_name, action, details, actor, created in records:
         identity = f"{escape(first_name or username or 'Без имени')} · <code>{target}</code>"
@@ -386,22 +392,25 @@ async def handle_admin_audit_callback(update: Update, context: ContextTypes.DEFA
     await _show_admin_audit(query, page, user_id)
 
 
-async def _show_admin_users(query):
-    rows = get_recent_users(10)
-    lines = ["👥 <b>Пользователи</b>", "Выберите пользователя для просмотра карточки и управления Premium:"]
+async def _show_admin_users(query, hidden: bool = False):
+    rows = get_hidden_users(10) if hidden else get_recent_users(10)
+    title = "🙈 <b>Скрытые пользователи</b>" if hidden else "👥 <b>Пользователи</b>"
+    lines = [title, "Выберите пользователя, чтобы открыть карточку:"]
     buttons = []
     for telegram_id, username, first_name, is_premium, downloads_today, _ in rows:
         name = (first_name or username or "Без имени")[:22]
-        status = "⭐" if is_premium else "👤"
+        status = "🙈" if hidden else ("⭐" if is_premium else "👤")
         buttons.append([InlineKeyboardButton(
             f"{status} {name} · {telegram_id}", callback_data=f"admin_users:user:{telegram_id}"
         )])
     if not rows:
-        lines.append("\nПользователей пока нет.")
-    buttons.extend([
-        [InlineKeyboardButton("🔎 Найти пользователя", callback_data="admin_users:search")],
-        [InlineKeyboardButton("⬅️ В админ-панель", callback_data="admin_panel:home")],
-    ])
+        lines.append("\nСписок пуст.")
+    if not hidden:
+        buttons.append([InlineKeyboardButton("🙈 Скрытые пользователи", callback_data="admin_users:hidden")])
+        buttons.append([InlineKeyboardButton("🔎 Найти пользователя", callback_data="admin_users:search")])
+    else:
+        buttons.append([InlineKeyboardButton("👥 К обычному списку", callback_data="admin_users:open")])
+    buttons.append([InlineKeyboardButton("⬅️ В админ-панель", callback_data="admin_panel:home")])
     await query.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(buttons))
 
 
@@ -417,6 +426,10 @@ async def _show_admin_user_card(query, user_id: int, notice: str | None = None):
     _, username, first_name, premium, premium_until, registered = user
     name = escape(first_name or username or str(user_id))
     status = f"⭐ Premium до {escape(str(premium_until or 'без срока'))}" if premium else "Обычный аккаунт"
+    hidden = is_user_hidden(user_id)
+    banned = is_user_banned(user_id)
+    status += "\n🙈 Скрыт из списка" if hidden else "\n👁 В обычном списке"
+    status += "\n🚫 Заблокирован" if banned else "\n✅ Не заблокирован"
     text = (
         f"👤 <b>Карточка пользователя</b>\n\n{name}\n"
         f"ID: <code>{user_id}</code>\nUsername: @{escape(username or '-')}\n"
@@ -431,6 +444,14 @@ async def _show_admin_user_card(query, user_id: int, notice: str | None = None):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("⭐ Управление Premium", callback_data=f"admin_users:premium:{user_id}")],
             [InlineKeyboardButton("📥 Скачивания пользователя", callback_data=f"admin_downloads:user:{user_id}")],
+            [InlineKeyboardButton(
+                "↩️ Вернуть в список" if hidden else "🙈 Скрыть из списка",
+                callback_data=f"admin_users:{'restore' if hidden else 'hide'}:{user_id}",
+            )],
+            [InlineKeyboardButton(
+                "✅ Разблокировать" if banned else "🚫 Заблокировать",
+                callback_data=f"admin_users:{'unban_confirm' if banned else 'ban_confirm'}:{user_id}",
+            )],
             [InlineKeyboardButton("⬅️ К пользователям", callback_data="admin_users:open")],
         ]),
     )
@@ -444,7 +465,50 @@ async def handle_admin_users_callback(update: Update, context: ContextTypes.DEFA
     await query.answer()
     parts = query.data.split(":")
     action = parts[1] if len(parts) > 1 else "open"
-    if action == "search":
+    if action == "hidden":
+        await _show_admin_users(query, hidden=True)
+    elif action == "hide" and len(parts) > 2 and parts[2].isdigit():
+        target_id = int(parts[2])
+        if is_admin(target_id):
+            await query.answer("Аккаунт администратора нельзя скрыть из списка.", show_alert=True)
+            return
+        if set_user_hidden(target_id, True, actor_id):
+            await _show_admin_user_card(query, target_id, "Пользователь скрыт из обычного списка. Данные сохранены.")
+        else:
+            await query.edit_message_text("Не удалось скрыть пользователя: запись не найдена.")
+    elif action == "restore" and len(parts) > 2 and parts[2].isdigit():
+        target_id = int(parts[2])
+        if set_user_hidden(target_id, False, actor_id):
+            await _show_admin_user_card(query, target_id, "Пользователь возвращён в обычный список.")
+        else:
+            await query.edit_message_text("Не удалось вернуть пользователя: запись не найдена.")
+    elif action in {"ban_confirm", "unban_confirm"} and len(parts) > 2 and parts[2].isdigit():
+        target_id = int(parts[2])
+        if is_admin(target_id) and action == "ban_confirm":
+            await query.answer("Администраторов блокировать нельзя.", show_alert=True)
+            return
+        verb = "разблокировать" if action == "unban_confirm" else "заблокировать"
+        apply_action = "unban_apply" if action == "unban_confirm" else "ban_apply"
+        await query.edit_message_text(
+            f"Подтвердите: {verb} пользователя <code>{target_id}</code>?",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Подтвердить", callback_data=f"admin_users:{apply_action}:{target_id}")],
+                [InlineKeyboardButton("↩️ Отмена", callback_data=f"admin_users:user:{target_id}")],
+            ]),
+        )
+    elif action in {"ban_apply", "unban_apply"} and len(parts) > 2 and parts[2].isdigit():
+        target_id = int(parts[2])
+        if action == "ban_apply":
+            if is_admin(target_id):
+                await query.answer("Администраторов блокировать нельзя.", show_alert=True)
+                return
+            ban_user(target_id, actor_id, "Заблокирован через админ-панель")
+            notice = "Пользователь заблокирован."
+        else:
+            notice = "Пользователь разблокирован." if unban_user(target_id, actor_id) else "Пользователь не был заблокирован."
+        await _show_admin_user_card(query, target_id, notice)
+    elif action == "search":
         context.user_data["admin_users_search"] = True
         await query.edit_message_text(
             "🔎 Отправьте Telegram ID или @username пользователя.",
@@ -494,7 +558,7 @@ async def handle_admin_users_callback(update: Update, context: ContextTypes.DEFA
         await _show_admin_user_card(query, selected_user, f"Изменения сохранены. {notice}")
     else:
         context.user_data.pop("admin_users_search", None)
-        await _show_admin_users(query)
+        await _show_admin_users(query, hidden=action == "hidden")
 
 
 def _admin_downloads_keyboard(page: int, service: str, user_id: int | None, total: int):
