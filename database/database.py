@@ -1,6 +1,7 @@
 import logging
 import sqlite3
-from datetime import date
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -10,6 +11,7 @@ DB_NAME = str(Path(__file__).resolve().parent / "history.db")
 FREE_DAILY_LIMIT = 20
 
 
+@contextmanager
 def connect():
     Path(__file__).resolve().parent.mkdir(exist_ok=True)
 
@@ -18,7 +20,15 @@ def connect():
     conn = sqlite3.connect(DB_NAME, timeout=10)
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    try:
+        yield conn
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _ensure_column(conn, table_name, column_name, definition):
@@ -26,6 +36,33 @@ def _ensure_column(conn, table_name, column_name, definition):
     existing_columns = {row[1] for row in cursor.fetchall()}
     if column_name not in existing_columns:
         conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+
+def _premium_expiry(value):
+    if not value:
+        return None
+    try:
+        expiry = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if expiry.tzinfo is not None:
+        expiry = expiry.astimezone().replace(tzinfo=None)
+    return expiry
+
+
+def _premium_is_active(conn, telegram_id: int, is_premium: int, premium_until: str | None) -> bool:
+    if not is_premium:
+        return False
+    if not premium_until:
+        return True  # Legacy no-expiry Premium remains active until revoked.
+    expiry = _premium_expiry(premium_until)
+    if expiry is None or expiry > datetime.now():
+        return True
+    conn.execute(
+        "UPDATE users SET is_premium = 0, premium_until = NULL WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    return False
 
 
 def create_database():
@@ -65,6 +102,7 @@ def create_database():
                 first_name TEXT,
                 action TEXT,
                 details TEXT,
+                actor_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -170,6 +208,20 @@ def create_database():
         _ensure_column(conn, "users", "reminders_enabled", "INTEGER NOT NULL DEFAULT 1")
         _ensure_column(conn, "users", "last_reminder_at", "TEXT")
         _ensure_column(conn, "users", "language_code", "TEXT")
+        _ensure_column(conn, "users", "bonus_downloads_remaining", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "users", "referral_eligible", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "security_log", "actor_id", "INTEGER")
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS referrals(
+                invited_user_id INTEGER PRIMARY KEY,
+                referrer_user_id INTEGER NOT NULL,
+                qualified INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                qualified_at TIMESTAMP
+            )
+            """
+        )
         conn.execute("UPDATE users SET last_seen_at = COALESCE(last_seen_at, registered_at) WHERE last_seen_at IS NULL")
         # Backfill legacy successful downloads that were previously stored
         # only in the user history table.
@@ -231,6 +283,7 @@ def add_security_log(
     first_name,
     action,
     details,
+    actor_id=None,
 ):
     with connect() as conn:
         cursor = conn.cursor()
@@ -241,9 +294,10 @@ def add_security_log(
                 username,
                 first_name,
                 action,
-                details
+                details,
+                actor_id
             )
-            VALUES(?,?,?,?,?)
+            VALUES(?,?,?,?,?,?)
             """,
             (
                 telegram_id,
@@ -251,6 +305,7 @@ def add_security_log(
                 first_name,
                 action,
                 details,
+                actor_id,
             ),
         )
 
@@ -439,9 +494,10 @@ def register_user(telegram_id, username, first_name, language_code=None):
                 telegram_id,
                 username,
                 first_name,
-                registered_at
+                registered_at,
+                referral_eligible
             )
-            VALUES(?,?,?, datetime('now'))
+            VALUES(?,?,?, datetime('now'), 1)
             """,
             (
                 telegram_id,
@@ -449,6 +505,7 @@ def register_user(telegram_id, username, first_name, language_code=None):
                 first_name,
             ),
         )
+        is_new_user = cursor.rowcount == 1
         cursor.execute(
             """
             UPDATE users
@@ -466,6 +523,7 @@ def register_user(telegram_id, username, first_name, language_code=None):
                 telegram_id,
             ),
         )
+    return is_new_user
 
 
 def can_download(telegram_id):
@@ -477,8 +535,10 @@ def can_download(telegram_id):
             """
             SELECT
                 is_premium,
+                premium_until,
                 downloads_today,
-                last_download_date
+                last_download_date,
+                bonus_downloads_remaining
             FROM users
             WHERE telegram_id = ?
             """,
@@ -490,9 +550,9 @@ def can_download(telegram_id):
         if row is None:
             return True
 
-        is_premium, downloads_today, last_download_date = row
+        is_premium, premium_until, downloads_today, last_download_date, bonus_remaining = row
 
-        if is_premium:
+        if _premium_is_active(conn, telegram_id, is_premium, premium_until):
             return True
 
         if last_download_date != today:
@@ -510,26 +570,80 @@ def can_download(telegram_id):
             )
             downloads_today = 0
 
-        return downloads_today < FREE_DAILY_LIMIT
+        return downloads_today < FREE_DAILY_LIMIT or bonus_remaining > 0
 
 
 def increase_download_count(telegram_id):
     today = date.today().isoformat()
 
     with connect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE users
-            SET downloads_today = downloads_today + 1,
-                last_download_date = ?
-            WHERE telegram_id = ?
-            """,
-            (
-                today,
-                telegram_id,
-            ),
+        conn.execute(
+            "UPDATE users SET downloads_today = 0, last_download_date = ? WHERE telegram_id = ? AND last_download_date != ?",
+            (today, telegram_id, today),
         )
+        user = conn.execute(
+            "SELECT is_premium, premium_until, downloads_today, bonus_downloads_remaining FROM users WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone()
+        if user:
+            is_premium, premium_until, downloads_today, bonus_remaining = user
+            premium_active = _premium_is_active(conn, telegram_id, is_premium, premium_until)
+            if not premium_active and downloads_today >= FREE_DAILY_LIMIT and bonus_remaining > 0:
+                conn.execute(
+                    "UPDATE users SET bonus_downloads_remaining = bonus_downloads_remaining - 1 WHERE telegram_id = ?",
+                    (telegram_id,),
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET downloads_today = downloads_today + 1, last_download_date = ? WHERE telegram_id = ?",
+                    (today, telegram_id),
+                )
+        referral = conn.execute(
+            "SELECT referrer_user_id FROM referrals WHERE invited_user_id = ? AND qualified = 0",
+            (telegram_id,),
+        ).fetchone()
+        if referral:
+            conn.execute(
+                "UPDATE referrals SET qualified = 1, qualified_at = datetime('now') WHERE invited_user_id = ? AND qualified = 0",
+                (telegram_id,),
+            )
+            if conn.execute("SELECT changes()").fetchone()[0]:
+                conn.execute(
+                    "UPDATE users SET bonus_downloads_remaining = bonus_downloads_remaining + 5, bonus_downloads_total = bonus_downloads_total + 5 WHERE telegram_id = ?",
+                    (referral[0],),
+                )
+
+
+def claim_referral(invited_user_id: int, referrer_user_id: int) -> bool:
+    if invited_user_id == referrer_user_id:
+        return False
+    with connect() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE telegram_id = ?", (referrer_user_id,)).fetchone() is None:
+            return False
+        cursor = conn.execute(
+            "UPDATE users SET referral_eligible = 0 WHERE telegram_id = ? AND referral_eligible = 1",
+            (invited_user_id,),
+        )
+        if cursor.rowcount != 1:
+            return False
+        conn.execute(
+            "INSERT OR IGNORE INTO referrals(invited_user_id, referrer_user_id) VALUES (?, ?)",
+            (invited_user_id, referrer_user_id),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0] == 1
+
+
+def get_referral_stats(user_id: int) -> tuple[int, int, int]:
+    with connect() as conn:
+        invited, qualified = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(qualified), 0) FROM referrals WHERE referrer_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        bonus = conn.execute(
+            "SELECT bonus_downloads_remaining FROM users WHERE telegram_id = ?",
+            (user_id,),
+        ).fetchone()
+    return int(invited or 0), int(qualified or 0), int(bonus[0] if bonus else 0)
 
 
 def get_user_total_downloads(telegram_id: int):
@@ -692,8 +806,6 @@ def get_bonus_request(request_id):
 
 
 def approve_bonus_request(request_id, bonus_downloads, approved_by):
-    today = date.today().isoformat()
-
     with connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -719,12 +831,11 @@ def approve_bonus_request(request_id, bonus_downloads, approved_by):
         cursor.execute(
             """
             UPDATE users
-            SET downloads_today = downloads_today + ?,
-                last_download_date = ?,
+            SET bonus_downloads_remaining = bonus_downloads_remaining + ?,
                 bonus_downloads_total = bonus_downloads_total + ?
             WHERE telegram_id = ?
             """,
-            (bonus_downloads, today, bonus_downloads, user_id),
+            (bonus_downloads, bonus_downloads, user_id),
         )
         return True
 
@@ -757,13 +868,16 @@ def get_user_profile(telegram_id: int):
                 premium_until,
                 downloads_today,
                 registered_at,
-                bonus_downloads_total
+                bonus_downloads_total,
+                bonus_downloads_remaining
             FROM users
             WHERE telegram_id = ?
             """,
             (telegram_id,),
         )
         profile = cursor.fetchone()
+        if profile and profile[2] and not _premium_is_active(conn, telegram_id, profile[2], profile[3]):
+            profile = (*profile[:2], 0, None, *profile[4:])
 
     return profile
 
@@ -780,7 +894,7 @@ def get_admin_stats():
             (today,),
         ).fetchone()[0]
         premium_users = conn.execute(
-            "SELECT COUNT(*) FROM users WHERE is_premium = 1"
+            "SELECT COUNT(*) FROM users WHERE is_premium = 1 AND (premium_until IS NULL OR datetime(premium_until) > datetime('now', 'localtime'))"
         ).fetchone()[0]
 
     return {
@@ -841,6 +955,144 @@ def get_download_stats_by_service():
     return [(str(media_type or "Неизвестно"), int(count)) for media_type, count in rows]
 
 
+def get_admin_downloads_page(page: int = 0, limit: int = 10, service: str | None = None, user_id: int | None = None):
+    """Fetch successful download records for the admin-only journal."""
+    page = max(0, int(page))
+    offset = page * limit
+    conditions = ["status = 'success'"]
+    params: list[object] = []
+    if service:
+        conditions.append("lower(COALESCE(media_type, '')) LIKE ?")
+        params.append(f"%{service.lower()}%")
+    if user_id is not None:
+        conditions.append("telegram_id = ?")
+        params.append(int(user_id))
+    where = " AND ".join(conditions)
+
+    with connect() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM downloads WHERE {where}", params
+        ).fetchone()[0]
+        rows = conn.execute(
+            f"""
+            SELECT telegram_id, username, first_name, url, media_type, created_at
+            FROM downloads WHERE {where}
+            ORDER BY id DESC LIMIT ? OFFSET ?
+            """,
+            (*params, limit, offset),
+        ).fetchall()
+    return rows, int(total or 0)
+
+
+def find_admin_download_users(query: str, limit: int = 10):
+    """Search registered users by exact numeric ID or username/name prefix."""
+    query = query.strip().lstrip("@")
+    if not query:
+        return []
+    with connect() as conn:
+        if query.isdigit():
+            rows = conn.execute(
+                "SELECT telegram_id, username, first_name FROM users WHERE telegram_id = ? LIMIT ?",
+                (int(query), limit),
+            ).fetchall()
+        else:
+            escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            rows = conn.execute(
+                """
+                SELECT telegram_id, username, first_name FROM users
+                WHERE lower(username) LIKE ? ESCAPE '\\' OR lower(first_name) LIKE ? ESCAPE '\\'
+                ORDER BY lower(username), telegram_id LIMIT ?
+                """,
+                (f"{escaped}%", f"{escaped}%", limit),
+            ).fetchall()
+    return rows
+
+
+def get_admin_user_download_summary(user_id: int):
+    with connect() as conn:
+        user = conn.execute(
+            "SELECT telegram_id, username, first_name, is_premium, premium_until, registered_at FROM users WHERE telegram_id = ?",
+            (user_id,),
+        ).fetchone()
+        if user and user[3] and not _premium_is_active(conn, user_id, user[3], user[4]):
+            user = (*user[:3], 0, None, user[5])
+        downloads = conn.execute(
+            "SELECT COUNT(*), MAX(created_at) FROM downloads WHERE telegram_id = ? AND status = 'success'",
+            (user_id,),
+        ).fetchone()
+    return (user, int(downloads[0] or 0), downloads[1]) if user else None
+
+
+def preview_premium_expiry(user_id: int, days: int):
+    if days not in {7, 30, 90}:
+        return None
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT is_premium, premium_until FROM users WHERE telegram_id = ?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        now = datetime.now()
+        is_active = _premium_is_active(conn, user_id, row[0], row[1])
+        if is_active and not row[1]:
+            return None
+        current_expiry = _premium_expiry(row[1]) if is_active else None
+        start = current_expiry if current_expiry and current_expiry > now else now
+        return (start + timedelta(days=days)).isoformat(sep=" ", timespec="seconds")
+
+
+def update_user_premium(user_id: int, days: int | None, actor_id: int):
+    """Grant/extend Premium or revoke it, recording the action in the same transaction."""
+    if days is not None and days not in {7, 30, 90}:
+        return None
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT username, first_name, is_premium, premium_until FROM users WHERE telegram_id = ?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+
+        username, first_name, current_flag, current_until = row
+        now = datetime.now()
+        active = _premium_is_active(conn, user_id, current_flag, current_until)
+        if days is None:
+            conn.execute(
+                "UPDATE users SET is_premium = 0, premium_until = NULL WHERE telegram_id = ?",
+                (user_id,),
+            )
+            event = "PREMIUM_REVOKED"
+            details = f"Администратор {actor_id} отключил Premium"
+            expiry_text = None
+        else:
+            if active and not current_until:
+                return {"error": "permanent"}
+            current_expiry = _premium_expiry(current_until) if active else None
+            base = current_expiry if current_expiry and current_expiry > now else now
+            expiry = base + timedelta(days=days)
+            expiry_text = expiry.isoformat(sep=" ", timespec="seconds")
+            conn.execute(
+                "UPDATE users SET is_premium = 1, premium_until = ? WHERE telegram_id = ?",
+                (expiry_text, user_id),
+            )
+            event = "PREMIUM_GRANTED"
+            details = f"Администратор {actor_id} выдал/продлил Premium на {days} дней; до {expiry_text}"
+
+        conn.execute(
+            "INSERT INTO security_log(telegram_id, username, first_name, action, details, actor_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, username, first_name, event, details, actor_id),
+        )
+        return {
+            "user_id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "is_premium": days is not None,
+            "premium_until": expiry_text,
+            "event": event,
+        }
+
+
 def get_recent_users(limit: int = 10):
     with connect() as conn:
         return conn.execute(
@@ -893,6 +1145,32 @@ def get_recent_security_events(limit: int = 15):
         ).fetchall()
 
 
+ADMIN_AUDIT_ACTIONS = (
+    "PREMIUM_GRANTED", "PREMIUM_REVOKED", "USER_BANNED", "USER_UNBANNED",
+    "ADMIN_ADDED", "ADMIN_REMOVED",
+)
+
+
+def get_admin_audit_page(page: int = 0, limit: int = 10, user_id: int | None = None):
+    """Return account/role changes made by admins, optionally for one target user."""
+    page = max(0, int(page))
+    limit = min(50, max(1, int(limit)))
+    placeholders = ",".join("?" for _ in ADMIN_AUDIT_ACTIONS)
+    where = f"action IN ({placeholders})"
+    params = list(ADMIN_AUDIT_ACTIONS)
+    if user_id is not None:
+        where += " AND telegram_id = ?"
+        params.append(int(user_id))
+    with connect() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM security_log WHERE {where}", params).fetchone()[0]
+        rows = conn.execute(
+            f"""SELECT telegram_id, username, first_name, action, details, actor_id, created_at
+                FROM security_log WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?""",
+            [*params, limit, page * limit],
+        ).fetchall()
+    return rows, total
+
+
 def is_user_banned(telegram_id: int) -> bool:
     with connect() as conn:
         return conn.execute(
@@ -907,14 +1185,25 @@ def ban_user(telegram_id: int, banned_by: int, reason: str = ""):
             "INSERT OR REPLACE INTO banned_users(telegram_id, reason, banned_by) VALUES (?, ?, ?)",
             (telegram_id, reason[:500], banned_by),
         )
+        user = conn.execute("SELECT username, first_name FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+        conn.execute(
+            "INSERT INTO security_log(telegram_id, username, first_name, action, details, actor_id) VALUES (?, ?, ?, 'USER_BANNED', ?, ?)",
+            (telegram_id, *(user or (None, None)), reason[:500], banned_by),
+        )
 
 
-def unban_user(telegram_id: int) -> bool:
+def unban_user(telegram_id: int, actor_id: int | None = None) -> bool:
     with connect() as conn:
         cursor = conn.execute(
             "DELETE FROM banned_users WHERE telegram_id = ?",
             (telegram_id,),
         )
+        if cursor.rowcount:
+            user = conn.execute("SELECT username, first_name FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+            conn.execute(
+                "INSERT INTO security_log(telegram_id, username, first_name, action, details, actor_id) VALUES (?, ?, ?, 'USER_UNBANNED', '', ?)",
+                (telegram_id, *(user or (None, None)), actor_id),
+            )
         return cursor.rowcount > 0
 
 
@@ -932,16 +1221,30 @@ def add_bot_admin(telegram_id: int, added_by: int) -> bool:
             "INSERT OR IGNORE INTO bot_admins(telegram_id, role, added_by) VALUES (?, 'admin', ?)",
             (telegram_id, added_by),
         )
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+        if changed:
+            user = conn.execute("SELECT username, first_name FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+            conn.execute(
+                "INSERT INTO security_log(telegram_id, username, first_name, action, details, actor_id) VALUES (?, ?, ?, 'ADMIN_ADDED', '', ?)",
+                (telegram_id, *(user or (None, None)), added_by),
+            )
+        return changed
 
 
-def remove_bot_admin(telegram_id: int) -> bool:
+def remove_bot_admin(telegram_id: int, actor_id: int | None = None) -> bool:
     with connect() as conn:
         cursor = conn.execute(
             "DELETE FROM bot_admins WHERE telegram_id = ?",
             (telegram_id,),
         )
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+        if changed:
+            user = conn.execute("SELECT username, first_name FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+            conn.execute(
+                "INSERT INTO security_log(telegram_id, username, first_name, action, details, actor_id) VALUES (?, ?, ?, 'ADMIN_REMOVED', '', ?)",
+                (telegram_id, *(user or (None, None)), actor_id),
+            )
+        return changed
 
 
 def get_bot_admins():

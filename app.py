@@ -39,6 +39,8 @@ from handlers.admin import (
     handle_admin_unban_callback,
     handle_admin_reply_message,
     handle_admin_panel_callback,
+    handle_admin_downloads_callback,
+    handle_admin_audit_callback,
     handle_bonus_request,
     handle_premium_stub,
     handle_admin_bonus_action,
@@ -53,6 +55,7 @@ from handlers.profile import profile_command
 from handlers.error import error_handler
 from handlers.health import health_command
 from handlers.video_tools import VideoToolsHandler
+from utils.download_queue import cancel_queued_download
 from handlers.feedback import feedback_callback
 from handlers.web_app import handle_web_app_data
 from keyboards.navigation import delete_message_callback
@@ -184,6 +187,12 @@ def main():
         CallbackQueryHandler(handle_admin_panel_callback, pattern=r"^admin_panel:")
     )
     app.add_handler(
+        CallbackQueryHandler(handle_admin_downloads_callback, pattern=r"^admin_downloads:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_audit_callback, pattern=r"^admin_audit:")
+    )
+    app.add_handler(
         CallbackQueryHandler(handle_admin_entry_callback, pattern=r"^admin_open_panel$")
     )
     app.add_handler(
@@ -200,6 +209,9 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_instagram_story_callback, pattern=r"^instagram_story:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(cancel_queued_download, pattern=r"^download_job:")
     )
     app.add_handler(
         CallbackQueryHandler(handle_download_ui_callback, pattern=r"^download_ui:")

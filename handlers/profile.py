@@ -5,6 +5,7 @@ from database.database import (
     FREE_DAILY_LIMIT,
     get_user_profile,
     get_user_total_downloads,
+    get_referral_stats,
 )
 from utils.message_utils import require_effective_user, require_message_target
 from utils.chat_cleanup import remember_ui_message
@@ -26,12 +27,13 @@ async def profile_command(
         return
 
     profile_values = profile if isinstance(profile, tuple) else ()
-    if len(profile_values) >= 7:
-        first_name, username, is_premium, premium_until, downloads_today, registered_at, bonus_downloads_total = profile_values[:7]
+    if len(profile_values) >= 8:
+        first_name, username, is_premium, premium_until, downloads_today, registered_at, bonus_downloads_total, bonus_remaining = profile_values[:8]
     else:
         first_name, username, is_premium, premium_until, downloads_today = profile_values[:5]
         registered_at = None
         bonus_downloads_total = 0
+        bonus_remaining = 0
 
     total_downloads = get_user_total_downloads(user_id)
 
@@ -49,7 +51,9 @@ async def profile_command(
         f"📛 Username: @{username if username else '-'}\n\n"
         f"⭐ Статус: {status}\n"
         f"📥 Использовано сегодня: {downloads_today}/{FREE_DAILY_LIMIT}\n"
-        f"📊 Осталось: {remaining}\n"
+        f"📊 Осталось сегодня: {remaining}"
+        + (f" + 🎁 {bonus_remaining} бонусных" if bonus_remaining else "")
+        + "\n"
     )
 
     if premium_until:
@@ -60,6 +64,16 @@ async def profile_command(
 
     text += f"\n📈 Всего скачиваний: {total_downloads}"
     text += f"\n🎁 Дополнительных скачиваний выдано: {bonus_downloads_total}"
+    invited, qualified, _ = get_referral_stats(user_id)
+    text += f"\n👥 Приглашено друзей: {invited} (скачали: {qualified})"
+
+    try:
+        bot_username = (await context.bot.get_me()).username
+        if bot_username:
+            text += f"\n\n🔗 Ваша ссылка-приглашение:\nhttps://t.me/{bot_username}?start=ref_{user_id}"
+            text += "\n🎁 За первую успешную загрузку приглашённого вы получите +5 скачиваний."
+    except Exception:
+        pass
 
     keyboard = [
         ["⭐ +20 скачиваний — 10⭐"],

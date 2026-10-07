@@ -36,6 +36,7 @@ class BaseDownloader(ABC):
         self.temp_root = Path(temp_root) if temp_root else Path(tempfile.gettempdir())
         self.temp_dir = None
         self.last_info = None
+        self.progress_callback = None
 
     def is_expected_download_error(self, error: Exception) -> bool:
         """Allow a downloader to classify handled fallback conditions as non-errors."""
@@ -63,6 +64,8 @@ class BaseDownloader(ABC):
             "quiet": True,
             "no_warnings": True,
         }
+        if self.progress_callback:
+            ytdlp_opts["progress_hooks"] = [self.progress_callback]
         local_app_data = os.environ.get("LOCALAPPDATA")
         if local_app_data:
             ytdlp_opts["ffmpeg_location"] = os.path.join(

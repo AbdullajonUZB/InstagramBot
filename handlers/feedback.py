@@ -31,7 +31,8 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user = require_effective_user(update)
     if query.data == "feedback:home":
-        context.user_data.pop("awaiting_feedback_comment", None)
+        if context.user_data is not None:
+            context.user_data.pop("awaiting_feedback_comment", None)
         from handlers.start import start
 
         await start(update, context)
@@ -47,7 +48,8 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rating = int(query.data.rsplit(":", 1)[1])
     save_feedback_rating(user.id, rating)
-    context.user_data["awaiting_feedback_comment"] = True
+    if context.user_data is not None:
+        context.user_data["awaiting_feedback_comment"] = True
     await context.bot.send_message(
         ADMIN_ID,
         f"⭐ Новая оценка: {rating}/5\n👤 {user.first_name or '-'} (@{user.username or 'без username'}, id={user.id})",
@@ -61,7 +63,7 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_feedback_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data.pop("awaiting_feedback_comment", False):
+    if context.user_data is None or not context.user_data.pop("awaiting_feedback_comment", False):
         return False
     user = require_effective_user(update)
     message = require_message_target(update)

@@ -421,4 +421,5 @@ async def download_instagram(
     story_mode: str = "one",
 ):
     downloader = InstagramDownloader(url=normalize_instagram_reel_url(url), logger=logger)
+    downloader.progress_callback = context.user_data.get("download_progress_callback")
     return await downloader.download(update, context, story_mode=story_mode)

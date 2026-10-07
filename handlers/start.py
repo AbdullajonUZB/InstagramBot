@@ -4,7 +4,7 @@ from telegram import InputFile, Update
 from telegram.ext import ContextTypes
 
 from keyboards.main_menu import main_menu
-from database.database import get_user_settings
+from database.database import claim_referral, get_user_settings
 from utils.i18n import translate
 from utils.message_utils import require_effective_user, require_message_target
 from utils.admin_roles import is_admin
@@ -14,6 +14,15 @@ from utils.chat_cleanup import clear_ui_messages, delete_button_message, delete_
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = require_effective_user(update)
+    if context.args and context.args[0].startswith("ref_"):
+        try:
+            referrer_id = int(context.args[0][4:])
+            if claim_referral(user.id, referrer_id):
+                await require_message_target(update).reply_text(
+                    "🎉 Вы перешли по приглашению! Друг получит бонус после вашей первой успешной загрузки."
+                )
+        except (TypeError, ValueError):
+            pass
     language = get_user_settings(user.id)["language"]
 
     message = require_message_target(update)

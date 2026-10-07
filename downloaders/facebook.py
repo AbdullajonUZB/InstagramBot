@@ -126,4 +126,5 @@ async def download_facebook(
     url: str,
 ):
     downloader = FacebookDownloader(url=url, logger=logger)
+    downloader.progress_callback = context.user_data.get("download_progress_callback")
     return await downloader.download(update, context)

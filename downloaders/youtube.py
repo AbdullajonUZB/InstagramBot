@@ -255,4 +255,5 @@ async def download_youtube(
     quality: str = "auto",
 ):
     downloader = YoutubeDownloader(url=url, logger=logger)
+    downloader.progress_callback = context.user_data.get("download_progress_callback")
     return await downloader.download(update, context, choice=choice, quality=quality)

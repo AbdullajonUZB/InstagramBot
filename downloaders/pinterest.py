@@ -7,13 +7,14 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import MAX_FILE_SIZE
-from database.database import add_history
+from database.database import add_history, increase_download_count
 from downloaders.base import BaseDownloader
 from utils.i18n import t
 from utils.media_sender import send_video
 from utils.message_utils import require_effective_user, require_message_target
 from utils.followup_media import remember_video_for_mp3
 from utils.media_cache import cache_message, make_cache_key
+from utils.download_limits import ensure_download_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,8 @@ class PinterestDownloader(BaseDownloader):
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = require_effective_user(update)
         message = require_message_target(update)
+        if not await ensure_download_allowed(update):
+            return False
         self.prepare_temp_dir()
 
         try:
@@ -65,6 +68,7 @@ class PinterestDownloader(BaseDownloader):
                 media_type = "Pinterest видео"
 
             add_history(user.id, self.url, media_type)
+            increase_download_count(user.id)
             return True
 
         except Exception as error:
@@ -81,4 +85,5 @@ async def download_pinterest(
     url: str,
 ):
     downloader = PinterestDownloader(url=url, logger=logger)
+    downloader.progress_callback = context.user_data.get("download_progress_callback")
     return await downloader.download(update, context)

@@ -23,6 +23,8 @@ from handlers.feedback import ask_for_feedback, handle_feedback_comment
 from database.database import add_history, increase_download_count
 from utils.media_cache import make_cache_key, send_cached_media
 from utils.chat_cleanup import delete_message_safely
+from utils.download_queue import run_queued_download
+from utils.download_limits import ensure_download_allowed
 
 
 def download_actions_keyboard(can_convert=False):
@@ -126,6 +128,8 @@ async def _handle_message_locked(update, context, message, text):
         return
 
     if selected_service != "youtube":
+        if not await ensure_download_allowed(update):
+            return
         cached_message = await send_cached_media(update, make_cache_key(url, selected_service))
         if cached_message is not None:
             add_history(require_effective_user(update).id, url, f"{selected_service} (кэш)")
@@ -163,10 +167,11 @@ async def _handle_message_locked(update, context, message, text):
         translate(language, "downloading")
     )
 
-    success = await downloader(
-        update,
+    success = await run_queued_download(
         context,
-        url,
+        status_message,
+        downloader(update, context, url),
+        owner_id=require_effective_user(update).id,
     )
 
     try:
@@ -209,6 +214,8 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data.pop("pending_youtube_url", None)
         clear_followup_media(context)
         cache_variant = "youtube:audio" if choice == "audio" else "youtube:video:auto"
+        if not await ensure_download_allowed(update):
+            return
         cached_message = await send_cached_media(update, make_cache_key(pending_url, cache_variant))
         if cached_message is not None:
             add_history(require_effective_user(update).id, pending_url, f"YouTube {'аудио' if choice == 'audio' else 'видео'} (кэш)")
@@ -219,11 +226,13 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
         status_message = await message.reply_text("⏳ Скачивание началось...")
 
         try:
-            success = await downloaders.youtube.download_youtube(
-                update,
+            success = await run_queued_download(
                 context,
-                pending_url,
-                choice=choice,
+                status_message,
+                downloaders.youtube.download_youtube(
+                    update, context, pending_url, choice=choice
+                ),
+                owner_id=require_effective_user(update).id,
             )
         finally:
             try:
@@ -284,6 +293,8 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
         context.user_data.pop("pending_youtube_url", None)
         clear_followup_media(context)
         message = require_message_target(update)
+        if not await ensure_download_allowed(update):
+            return
         cached_message = await send_cached_media(
             update, make_cache_key(pending_url, f"youtube:video:{quality}")
         )
@@ -295,8 +306,13 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
             return
         status_message = await message.reply_text("⏳ Скачивание началось...")
         try:
-            success = await downloaders.youtube.download_youtube(
-                update, context, pending_url, choice="video", quality=quality
+            success = await run_queued_download(
+                context,
+                status_message,
+                downloaders.youtube.download_youtube(
+                    update, context, pending_url, choice="video", quality=quality
+                ),
+                owner_id=require_effective_user(update).id,
             )
         finally:
             try:
@@ -331,8 +347,13 @@ async def handle_instagram_story_callback(update: Update, context: ContextTypes.
         message = require_message_target(update)
         status_message = await message.reply_text("⏳ Скачивание Story началось...")
         try:
-            success = await downloaders.instagram.download_instagram(
-                update, context, url, story_mode=mode
+            success = await run_queued_download(
+                context,
+                status_message,
+                downloaders.instagram.download_instagram(
+                    update, context, url, story_mode=mode
+                ),
+                owner_id=user_id,
             )
         finally:
             try:
