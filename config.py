@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+load_dotenv(PROJECT_ROOT / ".env.local", override=True)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 if not BOT_TOKEN:
@@ -15,6 +16,11 @@ if not BOT_TOKEN:
 # Оставьте пустым для облачного Bot API. Для локального сервера задайте, например,
 # TELEGRAM_LOCAL_API_URL=http://127.0.0.1:8082
 TELEGRAM_LOCAL_API_URL = os.getenv("TELEGRAM_LOCAL_API_URL", "").strip().rstrip("/")
+_inline_cache_chat_id = os.getenv("INLINE_CACHE_CHAT_ID", "").strip()
+try:
+    INLINE_CACHE_CHAT_ID = int(_inline_cache_chat_id) if _inline_cache_chat_id else None
+except ValueError as exc:
+    raise RuntimeError("INLINE_CACHE_CHAT_ID должен быть числовым Telegram ID") from exc
 if TELEGRAM_LOCAL_API_URL:
     _local_api_parts = urlsplit(TELEGRAM_LOCAL_API_URL)
     try:

@@ -10,6 +10,7 @@ __pycache__/
 
 # Секреты и конфиденциальные данные — НЕ должны попадать в git
 .env
+.env.local
 cookies.txt
 youtube_cookies.txt
 

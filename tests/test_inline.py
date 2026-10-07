@@ -7,8 +7,11 @@ from handlers.inline import (
     INLINE_QUERY_MAX_LENGTH,
     INLINE_TRIAL_LIMIT,
     build_inline_result,
+    build_cached_video_result,
     build_video_result,
     extract_direct_video,
+    _find_direct_video,
+    _cache_download_options,
 )
 from services import extract_service_link
 
@@ -82,6 +85,43 @@ class InlineModeTests(unittest.TestCase):
             ydl.return_value.__enter__.return_value.extract_info.return_value = metadata
             video = extract_direct_video("youtube", "https://youtu.be/abc123")
         self.assertIsNone(video)
+
+    def test_direct_video_with_referer_requirement_uses_cache_fallback(self):
+        metadata = {
+            "title": "Restricted video",
+            "thumbnail": "https://cdn.example/thumb.jpg",
+            "formats": [
+                {
+                    "url": "https://cdn.example/restricted.mp4",
+                    "ext": "mp4",
+                    "vcodec": "avc1",
+                    "acodec": "mp4a",
+                    "protocol": "https",
+                    "http_headers": {"Referer": "https://www.instagram.com/"},
+                }
+            ],
+        }
+        self.assertIsNone(_find_direct_video(metadata))
+
+    def test_cached_video_result_uses_telegram_file_id(self):
+        result = build_cached_video_result(
+            "facebook",
+            "https://facebook.com/reel/123",
+            "telegram-file-id",
+            2,
+            "example_bot",
+        )
+        self.assertEqual(result.video_file_id, "telegram-file-id")
+        self.assertEqual(result.description, "Пробный результат 2/3")
+
+    def test_cache_download_options_enable_download(self):
+        class DownloaderStub:
+            def _build_video_options(self, quality):
+                return {"format": "18", "skip_download": True}
+
+        options = _cache_download_options("youtube", DownloaderStub())
+        self.assertNotIn("skip_download", options)
+        self.assertTrue(options["noplaylist"])
 
     def test_inline_trial_quota_is_persistent_and_limited(self):
         from database import database

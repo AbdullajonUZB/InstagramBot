@@ -406,6 +406,14 @@ def consume_inline_trial(telegram_id: int, query_id: str, limit: int) -> tuple[b
         return True, used + 1
 
 
+def get_inline_trial_count(telegram_id: int) -> int:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM inline_trial_uses WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone()[0]
+
+
 def resolve_language(language, telegram_language_code=None):
     """Return a supported UI language, using Telegram language when set to auto."""
     if language != "auto":
