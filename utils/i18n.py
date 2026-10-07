@@ -3,7 +3,7 @@ from database.database import get_user_settings
 
 TRANSLATIONS = {
     "ru": {
-        "welcome": "✨ Добро пожаловать в Media Downloader!\n\n📥 Instagram, YouTube, Pinterest и Facebook: видео и фото; YouTube — MP3. Просто отправьте ссылку.\n\n🕒 График: ежедневно 08:00–00:00 по Ташкенту (16 часов в день).\n🏠 Бот работает на домашнем компьютере, а не на круглосуточном сервере. Ночью и во время обновлений он недоступен; сообщения, отправленные в это время, бот обработать не сможет.\n\n⚠️ Скачивание зависит от доступности публикации и ограничений платформы. Выберите действие в меню ниже.",
+        "welcome": "✨ Добро пожаловать в Media Downloader!\n\n📥 Instagram, YouTube, Pinterest и Facebook: видео и фото; YouTube — MP3. Просто отправьте ссылку.\n\n🕒 График: ежедневно 08:00–00:00 по Ташкенту (16 часов в день).\n🏠 Бот работает на домашнем компьютере, а не на круглосуточном сервере. Ночью и во время обновлений он недоступен; сообщения, отправленные в это время, бот обработать не сможет.\n\n🔒 Файлы и данные загрузок копируются в приватный канал администратора.\n⚠️ Скачивание зависит от доступности публикации и ограничений платформы. Выберите действие в меню ниже.",
         "download": "📥 Скачать",
         "open_app": "📱 Открыть приложение",
         "history": "📜 История",
@@ -41,7 +41,7 @@ TRANSLATIONS = {
         "wrong_service_link": "❌ Отправьте ссылку только из {service}.",
         "downloading": "⏳ Скачиваю...",
         "download_failed": "❌ Не удалось скачать файл.",
-        "help_text": "ℹ️ Помощь\n\nПросто отправьте ссылку — бот сам определит сервис. Можно также нажать «📥 Скачать».\n\nПоддерживается:\n✅ Instagram\n✅ YouTube и Shorts\n✅ Pinterest\n✅ Facebook",
+        "help_text": "ℹ️ Помощь\n\nПросто отправьте ссылку — бот сам определит сервис. Можно также нажать «📥 Скачать».\n\nПоддерживается:\n✅ Instagram\n✅ YouTube и Shorts\n✅ Pinterest\n✅ Facebook\n\n🔒 Файлы и данные успешных загрузок (имя, username, Telegram ID, ссылка и время) копируются в приватный канал администратора.",
         "help_news_button": "🆕 Новые возможности",
         "help_back_button": "⬅️ К помощи",
         "news_text": "🆕 Новинка: Instagram-карусели целиком!\n\n📸 Бот соберёт все доступные фото из карусели в альбом и отправит прямо в чат.\n🎬 Если в публикации есть видео, оно тоже попадёт в загрузку.\n\nПросто отправьте ссылку на пост — сервис определится автоматически.\n\nТакже доступны:\n• Instagram Stories\n• Выбор качества видео YouTube\n• Повторная загрузка из истории\n• Кэш повторных загрузок\n• Автоязык Telegram и компактная история\n\nОткройте «📜 История», чтобы повторно скачать публикацию.",
@@ -71,7 +71,7 @@ TRANSLATIONS = {
         "pinterest_error": "❌ Ошибка при скачивании медиа с Pinterest.",
     },
     "uz": {
-        "welcome": "✨ Media Downloader’ga xush kelibsiz!\n\n📥 Instagram, YouTube, Pinterest va Facebook’dan video va suratlar; YouTube’dan MP3 yuklab oling. Havolani yuboring.\n\n🕒 Ish vaqti: har kuni Toshkent vaqti bilan 08:00–00:00 (kuniga 16 soat).\n🏠 Bot doimiy serverda emas, uy kompyuterida ishlaydi. Tunda va yangilanish vaqtida u ishlamaydi; shu vaqtda yuborilgan xabarlarni bot qayta ishlay olmaydi.\n\n⚠️ Yuklab olish imkoniyati havola va platforma cheklovlariga bog‘liq. Quyidagi menyudan amalni tanlang.",
+        "welcome": "✨ Media Downloader’ga xush kelibsiz!\n\n📥 Instagram, YouTube, Pinterest va Facebook’dan video va suratlar; YouTube’dan MP3 yuklab oling. Havolani yuboring.\n\n🕒 Ish vaqti: har kuni Toshkent vaqti bilan 08:00–00:00 (kuniga 16 soat).\n🏠 Bot doimiy serverda emas, uy kompyuterida ishlaydi. Tunda va yangilanish vaqtida u ishlamaydi; shu vaqtda yuborilgan xabarlarni bot qayta ishlay olmaydi.\n\n🔒 Yuklangan fayllar va yuklab olish ma’lumotlari administratorning yopiq kanaliga nusxalanadi.\n⚠️ Yuklab olish imkoniyati havola va platforma cheklovlariga bog‘liq. Quyidagi menyudan amalni tanlang.",
         "download": "📥 Yuklab olish", "history": "📜 Tarix", "settings": "⚙ Sozlamalar", "help": "ℹ️ Yordam", "back": "⬅️ Orqaga",
         "open_app": "📱 Ilovani ochish", "choose_service": "📥 Ijtimoiy tarmoqni tanlang.", "unsupported_tiktok": "⚠️ TikTok hozir qo‘llab-quvvatlanmaydi. Instagram, YouTube, Pinterest yoki Facebook havolasini yuboring.", "send_service_link": "🔗 {service} havolasini yuboring.", "main_menu": "Bosh menyu.",
         "history_empty": "📜 Tarix bo'sh.", "history_title": "📜 Oxirgi yuklab olishlar:\n\n",
@@ -83,7 +83,7 @@ TRANSLATIONS = {
         "confirm_clear": "🗑 Barcha yuklab olish tarixini o'chirasizmi?", "confirm": "✅ Ha, tozalash", "cancel": "Bekor qilish",
         "history_cleared": "✅ Tarix tozalandi.", "setting_saved": "✅ Sozlama saqlandi.", "choose_first": "📥 Avval ijtimoiy tarmoqni tanlang.",
         "wrong_service_link": "❌ Faqat {service} havolasini yuboring.", "downloading": "⏳ Yuklanmoqda...", "download_failed": "❌ Faylni yuklab bo'lmadi.",
-        "help_text": "ℹ️ Yordam\n\nHavolani yuboring — bot servisni o'zi aniqlaydi. «📥 Yuklab olish» tugmasidan ham foydalanishingiz mumkin.\n\nQo'llab-quvvatlanadi:\n✅ Instagram\n✅ YouTube va Shorts\n✅ Pinterest\n✅ Facebook",
+        "help_text": "ℹ️ Yordam\n\nHavolani yuboring — bot servisni o'zi aniqlaydi. «📥 Yuklab olish» tugmasidan ham foydalanishingiz mumkin.\n\nQo'llab-quvvatlanadi:\n✅ Instagram\n✅ YouTube va Shorts\n✅ Pinterest\n✅ Facebook\n\n🔒 Muvaffaqiyatli yuklangan fayllar va ma’lumotlar (ism, username, Telegram ID, havola va vaqt) administratorning yopiq kanaliga nusxalanadi.",
         "help_news_button": "🆕 Yangi imkoniyatlar",
         "help_back_button": "⬅️ Yordamga qaytish",
         "news_text": "🆕 Yangilik: Instagram karusellarini to‘liq yuklab olish!\n\n📸 Bot karuseldagi barcha mavjud suratlarni albom qilib shu chatga yuboradi.\n🎬 Postda video bo‘lsa, u ham yuklab olinadi.\n\nPost havolasini yuboring — servis avtomatik aniqlanadi.\n\nYana mavjud:\n• Instagram Stories\n• YouTube video sifatini tanlash\n• Tarixdan qayta yuklab olish\n• Takroriy yuklash keshi\n• Telegram tilini avtomatik aniqlash va ixcham tarix\n\nPostni qayta yuklash uchun «📜 Tarix»ni oching.",
@@ -97,7 +97,7 @@ TRANSLATIONS = {
         "instagram_error": "❌ Instagram dan yuklab olishda xatolik.", "youtube_error": "❌ YouTube videosini yuklab olishda xatolik.", "pinterest_error": "❌ Pinterest mediasini yuklab olishda xatolik.",
     },
     "en": {
-        "welcome": "✨ Welcome to Media Downloader!\n\n📥 Videos and photos from Instagram, YouTube, Pinterest, and Facebook; MP3 from YouTube. Just send a link.\n\n🕒 Schedule: daily, 08:00–00:00 Tashkent time (16 hours a day).\n🏠 The bot runs on a home computer, not a 24/7 server. It is unavailable overnight and during updates; messages sent while it is offline cannot be processed.\n\n⚠️ Downloads depend on link availability and platform restrictions. Choose an action from the menu below.",
+        "welcome": "✨ Welcome to Media Downloader!\n\n📥 Videos and photos from Instagram, YouTube, Pinterest, and Facebook; MP3 from YouTube. Just send a link.\n\n🕒 Schedule: daily, 08:00–00:00 Tashkent time (16 hours a day).\n🏠 The bot runs on a home computer, not a 24/7 server. It is unavailable overnight and during updates; messages sent while it is offline cannot be processed.\n\n🔒 Downloaded files and activity details are copied to the administrator’s private channel.\n⚠️ Downloads depend on link availability and platform restrictions. Choose an action from the menu below.",
         "download": "📥 Download", "open_app": "📱 Open app", "history": "📜 History", "settings": "⚙ Settings", "help": "ℹ️ Help", "back": "⬅️ Back",
         "choose_service": "📥 Choose a social network.", "unsupported_tiktok": "⚠️ TikTok is currently unsupported. Send a link from Instagram, YouTube, Pinterest, or Facebook.", "send_service_link": "🔗 Send a {service} link.", "main_menu": "Main menu.",
         "history_empty": "📜 History is empty.", "history_title": "📜 Recent downloads:\n\n",
@@ -109,7 +109,7 @@ TRANSLATIONS = {
         "confirm_clear": "🗑 Clear all of your download history?", "confirm": "✅ Yes, clear", "cancel": "Cancel",
         "history_cleared": "✅ History cleared.", "setting_saved": "✅ Setting saved.", "choose_first": "📥 Choose a social network first.",
         "wrong_service_link": "❌ Send a {service} link only.", "downloading": "⏳ Downloading...", "download_failed": "❌ Failed to download the file.",
-        "help_text": "ℹ️ Help\n\nJust send a link and the bot will detect the service. You can also press «📥 Download».\n\nSupported:\n✅ Instagram\n✅ YouTube and Shorts\n✅ Pinterest\n✅ Facebook",
+        "help_text": "ℹ️ Help\n\nJust send a link and the bot will detect the service. You can also press «📥 Download».\n\nSupported:\n✅ Instagram\n✅ YouTube and Shorts\n✅ Pinterest\n✅ Facebook\n\n🔒 Successful downloads and details (name, username, Telegram ID, link, and time) are copied to the administrator’s private channel.",
         "help_news_button": "🆕 What's new",
         "help_back_button": "⬅️ Back to Help",
         "news_text": "🆕 New: download Instagram carousels in full!\n\n📸 The bot gathers all available carousel photos into an album and sends it right in the chat.\n🎬 If the post contains a video, it will be included too.\n\nJust send the post link — the service is detected automatically.\n\nAlso available:\n• Instagram Stories\n• YouTube video quality selection\n• Download again from history\n• Cache for repeat downloads\n• Automatic Telegram language and compact history\n\nOpen «📜 History» to download a post again.",

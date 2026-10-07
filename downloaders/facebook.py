@@ -17,6 +17,7 @@ from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
 from utils.video_compat import ensure_telegram_compatible_video
 from utils.media_cache import cache_message, make_cache_key
+from utils.download_audit import audit_successful_download
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class FacebookDownloader(BaseDownloader):
                 )
                 return False
             else:
-                remember_video_for_mp3(context, file_path)
+                remember_video_for_mp3(context, file_path, self.url)
                 file_path = await ensure_telegram_compatible_video(file_path)
                 if file_path.stat().st_size > MAX_FILE_SIZE:
                     await message.reply_text(t(user.id, "file_too_large"))
@@ -103,6 +104,7 @@ class FacebookDownloader(BaseDownloader):
 
             add_history(user.id, self.url, media_type)
             increase_download_count(user.id)
+            await audit_successful_download(context, update, self.url, media_type, sent_message)
             logger.debug("Facebook download completed")
             return True
 

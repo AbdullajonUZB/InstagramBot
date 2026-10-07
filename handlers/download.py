@@ -21,6 +21,7 @@ from utils.admin_notify import notify_admin_user_message
 from handlers.feedback import ask_for_feedback, handle_feedback_comment
 from database.database import add_history, increase_download_count
 from utils.media_cache import make_cache_key, send_cached_media
+from utils.download_audit import audit_successful_download
 from utils.chat_cleanup import delete_message_safely
 from utils.download_queue import run_queued_download
 from utils.download_limits import ensure_download_allowed
@@ -132,7 +133,7 @@ async def _handle_message_locked(update, context, message, text):
     if selected_service != "youtube":
         if not await ensure_download_allowed(update):
             return
-        cached_message = await send_cached_media(update, make_cache_key(url, selected_service))
+        cached_message = await send_cached_media(update, make_cache_key(url, selected_service), context)
         if cached_message is not None:
             add_history(require_effective_user(update).id, url, f"{selected_service} (кэш)")
             increase_download_count(require_effective_user(update).id)
@@ -218,7 +219,7 @@ async def handle_youtube_choice(update: Update, context: ContextTypes.DEFAULT_TY
         cache_variant = "youtube:audio" if choice == "audio" else "youtube:video:auto"
         if not await ensure_download_allowed(update):
             return
-        cached_message = await send_cached_media(update, make_cache_key(pending_url, cache_variant))
+        cached_message = await send_cached_media(update, make_cache_key(pending_url, cache_variant), context)
         if cached_message is not None:
             add_history(require_effective_user(update).id, pending_url, f"YouTube {'аудио' if choice == 'audio' else 'видео'} (кэш)")
             increase_download_count(require_effective_user(update).id)
@@ -298,7 +299,7 @@ async def handle_youtube_quality_callback(update: Update, context: ContextTypes.
         if not await ensure_download_allowed(update):
             return
         cached_message = await send_cached_media(
-            update, make_cache_key(pending_url, f"youtube:video:{quality}")
+            update, make_cache_key(pending_url, f"youtube:video:{quality}"), context
         )
         if cached_message is not None:
             add_history(require_effective_user(update).id, pending_url, "YouTube видео (кэш)")
@@ -393,7 +394,7 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
         try:
             await convert_video_to_mp3(Path(input_path), output_path)
             with output_path.open("rb") as audio:
-                await message.reply_audio(
+                sent_message = await message.reply_audio(
                     audio=audio,
                     filename="audio.mp3",
                     title="audio",
@@ -402,6 +403,13 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
                     connect_timeout=60,
                     pool_timeout=60,
                 )
+            await audit_successful_download(
+                context,
+                update,
+                context.user_data.get("followup_media_url", "Источник не сохранён"),
+                "MP3-конвертация",
+                sent_message,
+            )
             clear_followup_media(context)
             await query.edit_message_text(
                 "✅ MP3 готов.",

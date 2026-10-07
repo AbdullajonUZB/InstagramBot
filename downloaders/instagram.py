@@ -24,6 +24,7 @@ from utils.message_utils import require_effective_user, require_message_target
 from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
 from utils.media_cache import cache_message, make_cache_key
+from utils.download_audit import audit_successful_download
 
 logger = logging.getLogger(__name__)
 
@@ -195,11 +196,18 @@ class InstagramDownloader(BaseDownloader):
             else:
                 path.unlink(missing_ok=True)
 
-    async def _send_carousel(self, update: Update, files: list[Path], is_story: bool = False) -> bool:
+    async def _send_carousel(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        files: list[Path],
+        is_story: bool = False,
+    ) -> bool:
         message = require_message_target(update)
         user = require_effective_user(update)
         media_items = []
         opened_files = []
+        sent_messages = []
         caption = t(user.id, "instagram_stories" if is_story else "instagram_carousel")
         try:
             for file_path in files:
@@ -230,7 +238,9 @@ class InstagramDownloader(BaseDownloader):
             if not media_items:
                 return False
             for start in range(0, len(media_items), 10):
-                await message.reply_media_group(media=media_items[start:start + 10])
+                sent_messages.extend(
+                    await message.reply_media_group(media=media_items[start:start + 10])
+                )
         finally:
             for handle in opened_files:
                 handle.close()
@@ -238,6 +248,9 @@ class InstagramDownloader(BaseDownloader):
         media_label = "Instagram Stories" if is_story else "Instagram карусель"
         add_history(user.id, self.url, f"{media_label} ({len(media_items)} медиа)")
         increase_download_count(user.id)
+        await audit_successful_download(
+            context, update, self.url, f"{media_label} ({len(media_items)} медиа)", sent_messages
+        )
         return True
 
     async def download(self, update: Update, context: ContextTypes.DEFAULT_TYPE, story_mode: str = "one"):
@@ -318,7 +331,9 @@ class InstagramDownloader(BaseDownloader):
                     await message.reply_text("⚠️ В этой Story нет видео.")
                     return False
             if len(downloaded_media) > 1:
-                return await self._send_carousel(update, downloaded_media, is_story=is_story)
+                return await self._send_carousel(
+                    update, context, downloaded_media, is_story=is_story
+                )
 
             file_path, validation_result = await self.resolve_validated_file(
                 update,
@@ -353,10 +368,17 @@ class InstagramDownloader(BaseDownloader):
                 )
                 cache_message(make_cache_key(self.url, "instagram"), sent_message, "instagram_story_photo" if is_story else "instagram_photo")
                 increase_download_count(user.id)
+                await audit_successful_download(
+                    context,
+                    update,
+                    self.url,
+                    "Instagram Story фото" if is_story else "Instagram фото",
+                    sent_message,
+                )
                 return True
 
             if extension in video_formats:
-                remember_video_for_mp3(context, file_path)
+                remember_video_for_mp3(context, file_path, self.url)
                 file_path = await self._ensure_telegram_compatible_video(file_path)
                 size = file_path.stat().st_size
                 if size > MAX_FILE_SIZE:
@@ -378,6 +400,13 @@ class InstagramDownloader(BaseDownloader):
                     "Instagram Story видео" if is_story else "Видео",
                 )
                 increase_download_count(user.id)
+                await audit_successful_download(
+                    context,
+                    update,
+                    self.url,
+                    "Instagram Story видео" if is_story else "Instagram видео",
+                    sent_message,
+                )
                 return True
 
             with open(file_path, "rb") as document:
@@ -388,6 +417,9 @@ class InstagramDownloader(BaseDownloader):
             cache_message(make_cache_key(self.url, "instagram"), sent_message, "instagram_document")
             add_history(user.id, self.url, "Документ")
             increase_download_count(user.id)
+            await audit_successful_download(
+                context, update, self.url, "Instagram документ", sent_message
+            )
             return True
 
         except Exception as error:

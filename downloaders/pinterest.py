@@ -14,6 +14,7 @@ from utils.media_sender import send_video
 from utils.message_utils import require_effective_user, require_message_target
 from utils.followup_media import remember_video_for_mp3
 from utils.media_cache import cache_message, make_cache_key
+from utils.download_audit import audit_successful_download
 from utils.download_limits import ensure_download_allowed
 
 logger = logging.getLogger(__name__)
@@ -62,13 +63,14 @@ class PinterestDownloader(BaseDownloader):
                 cache_message(make_cache_key(self.url, "pinterest"), sent_message, "pinterest_photo")
                 media_type = "Pinterest фото"
             else:
-                remember_video_for_mp3(context, file_path)
+                remember_video_for_mp3(context, file_path, self.url)
                 sent_message = await send_video(update, str(file_path), t(user.id, "pinterest_video"))
                 cache_message(make_cache_key(self.url, "pinterest"), sent_message, "pinterest_video")
                 media_type = "Pinterest видео"
 
             add_history(user.id, self.url, media_type)
             increase_download_count(user.id)
+            await audit_successful_download(context, update, self.url, media_type, sent_message)
             return True
 
         except Exception as error:

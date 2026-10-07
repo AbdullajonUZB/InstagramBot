@@ -20,6 +20,7 @@ from utils.message_utils import require_effective_user, require_message_target
 from utils.download_limits import ensure_download_allowed
 from utils.followup_media import remember_video_for_mp3
 from utils.media_cache import cache_message, make_cache_key
+from utils.download_audit import audit_successful_download
 
 logger = logging.getLogger(__name__)
 YOUTUBE_COOKIE_FILE = Path(__file__).resolve().parent.parent / "youtube_cookies.txt"
@@ -141,7 +142,7 @@ class YoutubeDownloader(BaseDownloader):
 
         logger.info("[YouTube] 4/4 Uploading to Telegram")
         try:
-            remember_video_for_mp3(context, file_path)
+            remember_video_for_mp3(context, file_path, self.url)
             sent_message = await send_video(update, str(file_path), t(user.id, "youtube_video"))
             cache_message(make_cache_key(self.url, f"youtube:video:{quality}"), sent_message, "youtube_video")
         except (TimedOut, TelegramError) as error:
@@ -155,10 +156,11 @@ class YoutubeDownloader(BaseDownloader):
 
         add_history(user.id, self.url, "YouTube видео")
         increase_download_count(user.id)
+        await audit_successful_download(context, update, self.url, "YouTube видео", sent_message)
         logger.info("[YouTube] Successfully sent.")
         return True
 
-    async def _download_audio(self, update: Update):
+    async def _download_audio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = require_message_target(update)
         user = require_effective_user(update)
         logger.info("[YouTube] 2/4 Downloading")
@@ -229,6 +231,7 @@ class YoutubeDownloader(BaseDownloader):
 
         add_history(user.id, self.url, "YouTube аудио")
         increase_download_count(user.id)
+        await audit_successful_download(context, update, self.url, "YouTube аудио", sent_message)
         logger.info("[YouTube] Successfully sent.")
         return True
 
@@ -241,7 +244,7 @@ class YoutubeDownloader(BaseDownloader):
 
             logger.info("[YouTube] 1/4 Detecting URL")
             if choice == "audio":
-                return await self._download_audio(update)
+                return await self._download_audio(update, context)
             return await self._download_video(update, context, quality=quality)
         finally:
             self.cleanup()

@@ -1,6 +1,7 @@
 from urllib.parse import urlsplit, urlunsplit
 
 from database.database import get_cached_media, save_cached_media
+from utils.download_audit import audit_successful_download
 from utils.i18n import t
 from utils.message_utils import require_effective_user, require_message_target
 
@@ -21,7 +22,7 @@ def cache_message(cache_key: str, sent_message, caption_key: str):
             return
 
 
-async def send_cached_media(update, cache_key: str):
+async def send_cached_media(update, cache_key: str, context=None):
     cached = get_cached_media(cache_key)
     if not cached:
         return None
@@ -37,4 +38,21 @@ async def send_cached_media(update, cache_key: str):
         kwargs["caption"] = caption
     if media_type == "video":
         kwargs["supports_streaming"] = True
-    return await sender(**kwargs)
+    sent_message = await sender(**kwargs)
+    if context is not None:
+        variant = cache_key.rsplit("|", 1)[-1]
+        service = variant.split(":", 1)[0]
+        label = {
+            "youtube": "YouTube аудио" if ":audio" in variant else "YouTube видео",
+            "instagram": "Instagram медиа",
+            "facebook": "Facebook медиа",
+            "pinterest": "Pinterest медиа",
+        }.get(service, service)
+        await audit_successful_download(
+            context,
+            update,
+            cache_key.rsplit("|", 1)[0],
+            f"{label} (из кэша)",
+            sent_message,
+        )
+    return sent_message
