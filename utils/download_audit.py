@@ -26,16 +26,14 @@ def _audit_text(user, service, url):
     username = f"@{user.username}" if user.username else "не указан"
     first_name = user.full_name or user.first_name or "Без имени"
     timestamp = datetime.now(TASHKENT).strftime("%d.%m.%Y %H:%M:%S")
-    return (
-        "📥 Успешная загрузка\n\n"
-        f"👤 Пользователь: {first_name}\n"
-        f"🔗 Username: {username}\n"
+    text = (
+        f"📥 {service}\n"
+        f"👤 {first_name} ({username})\n"
         f"🆔 Telegram ID: {user.id}\n"
-        f"🌐 Сервис/тип: {service}\n"
-        f"🔗 Ссылка: {url}\n"
-        f"🕒 Время (Ташкент): {timestamp}\n\n"
-        "Следом приложена копия результата."
+        f"🔗 {url}\n"
+        f"🕒 {timestamp} (Ташкент)"
     )
+    return text if len(text) <= 1024 else f"{text[:1023]}…"
 
 
 async def audit_successful_download(context, update, url: str, service: str, messages):
@@ -54,24 +52,24 @@ async def audit_successful_download(context, update, url: str, service: str, mes
         return
 
     try:
-        await context.bot.send_message(
-            chat_id=INLINE_CACHE_CHAT_ID,
-            text=_audit_text(user, service, url),
-            disable_web_page_preview=True,
-        )
+        caption = _audit_text(user, service, url)
         if len(media) > 1 and all(kind in {"photo", "video"} for kind, _ in media):
             for start in range(0, len(media), 10):
                 group = media[start:start + 10]
-                input_media = [
-                    InputMediaVideo(file_id, supports_streaming=True)
-                    if kind == "video"
-                    else InputMediaPhoto(file_id)
-                    for kind, file_id in group
-                ]
+                input_media = []
+                for index, (kind, file_id) in enumerate(group):
+                    item_caption = caption if start == 0 and index == 0 else None
+                    if kind == "video":
+                        input_media.append(InputMediaVideo(
+                            file_id,
+                            supports_streaming=True,
+                            caption=item_caption,
+                        ))
+                    else:
+                        input_media.append(InputMediaPhoto(file_id, caption=item_caption))
                 await context.bot.send_media_group(
                     chat_id=INLINE_CACHE_CHAT_ID,
                     media=input_media,
-                    disable_notification=True,
                 )
             return
 
@@ -80,38 +78,38 @@ async def audit_successful_download(context, update, url: str, service: str, mes
                 await context.bot.send_photo(
                     chat_id=INLINE_CACHE_CHAT_ID,
                     photo=file_id,
-                    disable_notification=True,
+                    caption=caption,
                 )
             elif kind == "video":
                 await context.bot.send_video(
                     chat_id=INLINE_CACHE_CHAT_ID,
                     video=file_id,
                     supports_streaming=True,
-                    disable_notification=True,
+                    caption=caption,
                 )
             elif kind == "audio":
                 await context.bot.send_audio(
                     chat_id=INLINE_CACHE_CHAT_ID,
                     audio=file_id,
-                    disable_notification=True,
+                    caption=caption,
                 )
             elif kind == "document":
                 await context.bot.send_document(
                     chat_id=INLINE_CACHE_CHAT_ID,
                     document=file_id,
-                    disable_notification=True,
+                    caption=caption,
                 )
             elif kind == "animation":
                 await context.bot.send_animation(
                     chat_id=INLINE_CACHE_CHAT_ID,
                     animation=file_id,
-                    disable_notification=True,
+                    caption=caption,
                 )
             elif kind == "voice":
                 await context.bot.send_voice(
                     chat_id=INLINE_CACHE_CHAT_ID,
                     voice=file_id,
-                    disable_notification=True,
+                    caption=caption,
                 )
     except Exception:
         logger.exception("Could not archive successful download for user %s", user.id)

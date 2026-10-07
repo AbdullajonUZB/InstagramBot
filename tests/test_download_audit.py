@@ -20,9 +20,9 @@ class DownloadAuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("12345", text)
         self.assertIn("YouTube видео", text)
         self.assertIn("https://example.com/video", text)
-        self.assertIn("Время (Ташкент)", text)
+        self.assertRegex(text, r"\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2} \(Ташкент\)")
 
-    async def test_successful_video_is_copied_with_activity_post(self):
+    async def test_successful_video_and_activity_are_one_captioned_post(self):
         from utils import download_audit
 
         original_channel_id = download_audit.INLINE_CACHE_CHAT_ID
@@ -49,13 +49,15 @@ class DownloadAuditTests(unittest.IsolatedAsyncioTestCase):
                 message,
             )
 
-            bot.send_message.assert_awaited_once()
+            bot.send_message.assert_not_awaited()
             bot.send_video.assert_awaited_once_with(
                 chat_id=-100123,
                 video="video-file-id",
                 supports_streaming=True,
-                disable_notification=True,
+                caption=unittest.mock.ANY,
             )
+            self.assertIn("12345", bot.send_video.await_args.kwargs["caption"])
+            self.assertIn("https://example.com/video", bot.send_video.await_args.kwargs["caption"])
         finally:
             download_audit.INLINE_CACHE_CHAT_ID = original_channel_id
 
