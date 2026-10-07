@@ -197,6 +197,15 @@ def create_database():
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS inline_trial_uses(
+                query_id TEXT PRIMARY KEY,
+                telegram_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         cursor.executemany(
             "INSERT OR IGNORE INTO bot_settings(setting_key, setting_value) VALUES (?, ?)",
             [("reminders_enabled", "1"), ("reminder_after_days", "7")],
@@ -366,6 +375,35 @@ def save_cached_media(cache_key: str, media_type: str, file_id: str, caption_key
             """,
             (cache_key, media_type, file_id, caption_key),
         )
+
+
+def consume_inline_trial(telegram_id: int, query_id: str, limit: int) -> tuple[bool, int]:
+    """Reserve one inline preview for a unique query; return (allowed, used)."""
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            "SELECT 1 FROM inline_trial_uses WHERE query_id = ? AND telegram_id = ?",
+            (query_id, telegram_id),
+        ).fetchone()
+        if existing:
+            used = conn.execute(
+                "SELECT COUNT(*) FROM inline_trial_uses WHERE telegram_id = ?",
+                (telegram_id,),
+            ).fetchone()[0]
+            return True, used
+
+        used = conn.execute(
+            "SELECT COUNT(*) FROM inline_trial_uses WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone()[0]
+        if used >= limit:
+            return False, used
+
+        conn.execute(
+            "INSERT INTO inline_trial_uses(query_id, telegram_id) VALUES (?, ?)",
+            (query_id, telegram_id),
+        )
+        return True, used + 1
 
 
 def resolve_language(language, telegram_language_code=None):

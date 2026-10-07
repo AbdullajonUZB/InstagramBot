@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -41,8 +41,11 @@ class AdminPremiumTests(unittest.TestCase):
     def test_expired_premium_is_revoked_before_download_limit_check(self):
         with database.connect() as conn:
             conn.execute(
-                "UPDATE users SET is_premium = 1, premium_until = ?, downloads_today = 20, last_download_date = date('now') WHERE telegram_id = 901",
-                ((datetime.now() - timedelta(days=1)).isoformat(sep=" "),),
+                "UPDATE users SET is_premium = 1, premium_until = ?, downloads_today = 20, last_download_date = ? WHERE telegram_id = 901",
+                (
+                    (datetime.now() - timedelta(days=1)).isoformat(sep=" "),
+                    date.today().isoformat(),
+                ),
             )
 
         self.assertFalse(database.can_download(901))
