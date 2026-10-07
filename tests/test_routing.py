@@ -67,7 +67,7 @@ class RoutingTests(unittest.TestCase):
             ("YouTube аудио", "https://youtu.be/test", "today"),
         ])
         callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
-        self.assertEqual(callbacks, ["history:download:1", "history:download:2"])
+        self.assertEqual(callbacks, ["history:download:1", "history:download:2", "main_menu"])
         self.assertEqual(len(keyboard.inline_keyboard[0]), 2)
 
     def test_carousel_media_extensions_include_photos_and_videos(self):

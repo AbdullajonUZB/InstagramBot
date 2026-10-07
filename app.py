@@ -1,3 +1,6 @@
+import time
+from datetime import datetime
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -67,6 +70,7 @@ from utils.reminders import reminder_post_init, reminder_post_shutdown
 from handlers.reminders import reminder_callback
 from utils.instance_lock import SingleInstanceLock
 from utils.web_app_server import start_web_app_server, stop_web_app_server
+from utils.bot_profile import configure_bot_profile
 
 logger.info("Initializing Instagram Downloader...")
 
@@ -78,6 +82,11 @@ async def handle_youtube_choice_callback(update, context):
 
 
 async def application_post_init(application):
+    application.bot_data["started_at"] = datetime.now().astimezone()
+    application.bot_data["started_monotonic"] = time.monotonic()
+    application.bot_data["download_active"] = 0
+    application.bot_data["download_queue_waiting"] = {}
+    await configure_bot_profile(application.bot)
     await reminder_post_init(application)
     await start_web_app_server(application)
 

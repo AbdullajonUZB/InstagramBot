@@ -64,12 +64,16 @@ async def run_queued_download(context, status_message, download_coro, owner_id=N
     try:
         async with semaphore:
             waiting.pop(job_id, None)
-            context.user_data["download_progress_callback"] = report_progress
+            data["download_active"] = data.get("download_active", 0) + 1
             try:
-                await status_message.edit_text("⏳ Скачивание началось...")
-            except Exception:
-                pass
-            return await download_coro
+                context.user_data["download_progress_callback"] = report_progress
+                try:
+                    await status_message.edit_text("⏳ Скачивание началось...")
+                except Exception:
+                    pass
+                return await download_coro
+            finally:
+                data["download_active"] = max(0, data.get("download_active", 1) - 1)
     except asyncio.CancelledError:
         if is_waiting:
             waiting.pop(job_id, None)

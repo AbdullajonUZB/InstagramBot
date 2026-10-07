@@ -257,7 +257,7 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
     elif action == "security":
         await _show_admin_audit(query)
     elif action == "health":
-        text = await health_report_text()
+        text = await health_report_text(context.application)
         await query.edit_message_text(text[:4000], reply_markup=admin_submenu_keyboard())
     elif action == "reminders" and is_owner(user_id):
         await query.edit_message_text(_reminders_text(), reply_markup=reminders_keyboard())
