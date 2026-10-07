@@ -41,6 +41,7 @@ from handlers.admin import (
     handle_admin_panel_callback,
     handle_admin_downloads_callback,
     handle_admin_audit_callback,
+    handle_admin_users_callback,
     handle_bonus_request,
     handle_premium_stub,
     handle_admin_bonus_action,
@@ -191,6 +192,9 @@ def main():
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_audit_callback, pattern=r"^admin_audit:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(handle_admin_users_callback, pattern=r"^admin_users:")
     )
     app.add_handler(
         CallbackQueryHandler(handle_admin_entry_callback, pattern=r"^admin_open_panel$")

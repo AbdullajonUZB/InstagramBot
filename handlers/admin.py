@@ -248,17 +248,7 @@ async def handle_admin_panel_callback(update: Update, context: ContextTypes.DEFA
         text += "\n".join(f"• {media_type}: {count}" for media_type, count in rows) or "Данных пока нет."
         await query.edit_message_text(text[:4000], reply_markup=admin_submenu_keyboard())
     elif action == "users":
-        rows = get_recent_users()
-        text = "👥 Последние пользователи\n\n"
-        if rows:
-            text += "\n".join(
-                f"• {first_name or '-'} (@{username or '-'}, ID: {telegram_id})"
-                f" — {'Premium' if is_premium else 'обычный'}, сегодня: {downloads_today}"
-                for telegram_id, username, first_name, is_premium, downloads_today, _ in rows
-            )
-        else:
-            text += "Пользователей пока нет."
-        await query.edit_message_text(text[:4000], reply_markup=admin_submenu_keyboard())
+        await _show_admin_users(query)
     elif action == "security":
         await _show_admin_audit(query)
     elif action == "health":
@@ -377,6 +367,117 @@ async def handle_admin_audit_callback(update: Update, context: ContextTypes.DEFA
     await _show_admin_audit(query, page, user_id)
 
 
+async def _show_admin_users(query):
+    rows = get_recent_users(10)
+    lines = ["👥 <b>Пользователи</b>", "Выберите пользователя для просмотра карточки и управления Premium:"]
+    buttons = []
+    for telegram_id, username, first_name, is_premium, downloads_today, _ in rows:
+        name = (first_name or username or "Без имени")[:22]
+        status = "⭐" if is_premium else "👤"
+        buttons.append([InlineKeyboardButton(
+            f"{status} {name} · {telegram_id}", callback_data=f"admin_users:user:{telegram_id}"
+        )])
+    if not rows:
+        lines.append("\nПользователей пока нет.")
+    buttons.extend([
+        [InlineKeyboardButton("🔎 Найти пользователя", callback_data="admin_users:search")],
+        [InlineKeyboardButton("⬅️ В админ-панель", callback_data="admin_panel:home")],
+    ])
+    await query.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def _show_admin_user_card(query, user_id: int, notice: str | None = None):
+    summary = get_admin_user_download_summary(user_id)
+    if not summary:
+        await query.edit_message_text(
+            "Пользователь не найден в базе.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К пользователям", callback_data="admin_users:open")]]),
+        )
+        return
+    user, total_downloads, last_download = summary
+    _, username, first_name, premium, premium_until, registered = user
+    name = escape(first_name or username or str(user_id))
+    status = f"⭐ Premium до {escape(str(premium_until or 'без срока'))}" if premium else "Обычный аккаунт"
+    text = (
+        f"👤 <b>Карточка пользователя</b>\n\n{name}\n"
+        f"ID: <code>{user_id}</code>\nUsername: @{escape(username or '-')}\n"
+        f"Статус: {status}\nУспешных скачиваний: {total_downloads}\n"
+        f"Последнее скачивание: {escape(str(last_download or 'нет'))}\n"
+        f"Регистрация: {escape(str(registered or 'неизвестно'))}"
+    )
+    if notice:
+        text += f"\n\n✅ {escape(notice)}"
+    await query.edit_message_text(
+        text, parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Управление Premium", callback_data=f"admin_users:premium:{user_id}")],
+            [InlineKeyboardButton("📥 Скачивания пользователя", callback_data=f"admin_downloads:user:{user_id}")],
+            [InlineKeyboardButton("⬅️ К пользователям", callback_data="admin_users:open")],
+        ]),
+    )
+
+
+async def handle_admin_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    actor_id = require_effective_user(update).id
+    if query is None or query.message is None or not query.data or not is_admin(actor_id):
+        return
+    await query.answer()
+    parts = query.data.split(":")
+    action = parts[1] if len(parts) > 1 else "open"
+    if action == "search":
+        context.user_data["admin_users_search"] = True
+        await query.edit_message_text(
+            "🔎 Отправьте Telegram ID или @username пользователя.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✖️ Отмена", callback_data="admin_users:open")]]),
+        )
+    elif action == "user" and len(parts) > 2 and parts[2].isdigit():
+        context.user_data.pop("admin_users_search", None)
+        await _show_admin_user_card(query, int(parts[2]))
+    elif action == "premium" and len(parts) > 2 and parts[2].isdigit():
+        await _show_premium_management(query, int(parts[2]), prefix="admin_users")
+    elif action == "premium_confirm" and len(parts) == 4 and parts[2].isdigit():
+        selected_user, choice = int(parts[2]), parts[3]
+        if choice == "off":
+            confirmation = "Отключить Premium этому пользователю?"
+        elif choice.isdigit() and int(choice) in {7, 30, 90}:
+            expiry = preview_premium_expiry(selected_user, int(choice))
+            if expiry is None:
+                await _show_premium_management(query, selected_user, prefix="admin_users")
+                return
+            confirmation = f"Выдать/продлить Premium на {choice} дней?\nНовый срок: {expiry}"
+        else:
+            return
+        await query.edit_message_text(
+            f"⚠️ <b>Подтвердите действие</b>\n\n{confirmation}", parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Подтвердить", callback_data=f"admin_users:premium_apply:{selected_user}:{choice}")],
+                [InlineKeyboardButton("↩️ Отмена", callback_data=f"admin_users:premium:{selected_user}")],
+            ]),
+        )
+    elif action == "premium_apply" and len(parts) == 4 and parts[2].isdigit():
+        selected_user, choice = int(parts[2]), parts[3]
+        days = None if choice == "off" else (int(choice) if choice.isdigit() else -1)
+        result = update_user_premium(selected_user, days, actor_id)
+        if not result:
+            await query.edit_message_text("❌ Не удалось изменить Premium: пользователь не найден.")
+            return
+        if result.get("error") == "permanent":
+            await _show_premium_management(query, selected_user, prefix="admin_users")
+            return
+        try:
+            message = (f"🎉 Вам выдан или продлён Premium. Подписка действует до {result['premium_until']}."
+                       if result["is_premium"] else "ℹ️ Администратор отключил Premium-доступ. Бесплатный лимит скачиваний снова действует.")
+            await context.bot.send_message(chat_id=selected_user, text=message)
+            notice = "Пользователь уведомлён."
+        except TelegramError:
+            notice = "Не удалось отправить уведомление пользователю."
+        await _show_admin_user_card(query, selected_user, f"Изменения сохранены. {notice}")
+    else:
+        context.user_data.pop("admin_users_search", None)
+        await _show_admin_users(query)
+
+
 def _admin_downloads_keyboard(page: int, service: str, user_id: int | None, total: int):
     rows = []
     service_buttons = []
@@ -403,7 +504,6 @@ def _admin_downloads_keyboard(page: int, service: str, user_id: int | None, tota
     if navigation:
         rows.append(navigation)
     if user_id is not None:
-        rows.append([InlineKeyboardButton("⭐ Управление Premium", callback_data=f"admin_downloads:premium:{user_id}")])
         rows.append([InlineKeyboardButton("📋 Все скачивания", callback_data="admin_downloads:open")])
     rows.append([InlineKeyboardButton("⬅️ В админ-панель", callback_data="admin_panel:home")])
     return InlineKeyboardMarkup(rows)
@@ -473,13 +573,13 @@ async def _show_admin_downloads(
     )
 
 
-async def _show_premium_management(query, user_id: int):
+async def _show_premium_management(query, user_id: int, prefix: str = "admin_users"):
     summary = get_admin_user_download_summary(user_id)
     if not summary:
         await query.edit_message_text(
             "Пользователь не найден.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
-                "⬅️ Назад", callback_data="admin_downloads:open"
+                "⬅️ Назад", callback_data="admin_users:user:" + str(user_id)
             )]]),
         )
         return
@@ -495,16 +595,16 @@ async def _show_premium_management(query, user_id: int):
     rows = []
     if not (is_premium and not premium_until):
         rows.extend([
-            [InlineKeyboardButton("➕ 7 дней", callback_data=f"admin_downloads:premium_confirm:{user_id}:7"),
-             InlineKeyboardButton("➕ 30 дней", callback_data=f"admin_downloads:premium_confirm:{user_id}:30")],
-            [InlineKeyboardButton("➕ 90 дней", callback_data=f"admin_downloads:premium_confirm:{user_id}:90")],
+            [InlineKeyboardButton("➕ 7 дней", callback_data=f"{prefix}:premium_confirm:{user_id}:7"),
+             InlineKeyboardButton("➕ 30 дней", callback_data=f"{prefix}:premium_confirm:{user_id}:30")],
+            [InlineKeyboardButton("➕ 90 дней", callback_data=f"{prefix}:premium_confirm:{user_id}:90")],
         ])
     if is_premium:
         rows.append([InlineKeyboardButton(
-            "⛔ Отключить Premium", callback_data=f"admin_downloads:premium_confirm:{user_id}:off"
+            "⛔ Отключить Premium", callback_data=f"{prefix}:premium_confirm:{user_id}:off"
         )])
     rows.append([InlineKeyboardButton(
-        "⬅️ К карточке пользователя", callback_data=f"admin_downloads:results:{user_id}"
+        "⬅️ К карточке пользователя", callback_data=f"admin_users:user:{user_id}"
     )])
     await query.edit_message_text(
         f"⭐ <b>Управление Premium</b>\n\n"
@@ -934,6 +1034,24 @@ async def handle_admin_reply_message(update: Update, context: ContextTypes.DEFAU
         return
 
     message = require_message_target(update)
+    if context.user_data.pop("admin_users_search", False):
+        query_text = (message.text or "").strip()
+        selected_user = int(query_text) if query_text.isdigit() else None
+        if selected_user is None:
+            record = get_user_by_username(query_text)
+            if record:
+                selected_user = int(record[0])
+        if selected_user is None or not get_admin_user_download_summary(selected_user):
+            await message.reply_text("🔎 Пользователь не найден. Он должен сначала запустить бота.")
+        else:
+            await message.reply_text(
+                f"👤 Пользователь найден: {selected_user}",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+                    "Открыть карточку", callback_data=f"admin_users:user:{selected_user}"
+                )]]),
+            )
+        raise ApplicationHandlerStop
+
     if context.user_data.pop("admin_audit_search", False):
         query_text = (message.text or "").strip()
         selected_user = None
