@@ -52,6 +52,13 @@ def _env_int(name: str, default: int) -> int:
         raise RuntimeError(f"{name} должен быть целым числом") from exc
 
 
+AUDD_API_TOKEN = os.getenv("AUDD_API_TOKEN", "").strip()
+# Recognition stays disabled until the owner explicitly sets a maximum request budget.
+AUDD_MAX_REQUESTS = _env_int("AUDD_MAX_REQUESTS", 0)
+if AUDD_MAX_REQUESTS < 0:
+    raise RuntimeError("AUDD_MAX_REQUESTS не может быть отрицательным")
+
+
 ADMIN_IDS = {_env_int("ADMIN_ID", 136350248)}
 _extra_admin_ids = os.getenv("ADMIN_IDS", "")
 if _extra_admin_ids.strip():

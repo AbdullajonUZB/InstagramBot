@@ -206,6 +206,14 @@ def create_database():
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audd_recognition_usage(
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                request_count INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
         cursor.executemany(
             "INSERT OR IGNORE INTO bot_settings(setting_key, setting_value) VALUES (?, ?)",
             [("reminders_enabled", "1"), ("reminder_after_days", "7")],
@@ -252,6 +260,23 @@ def create_database():
             )
             """
         )
+
+
+def reserve_audd_recognition_request(max_requests: int) -> bool:
+    """Atomically reserve one provider request, enforcing a hard lifetime cap."""
+    if max_requests <= 0:
+        return False
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "INSERT OR IGNORE INTO audd_recognition_usage(id, request_count) VALUES (1, 0)"
+        )
+        cursor = conn.execute(
+            "UPDATE audd_recognition_usage SET request_count = request_count + 1 "
+            "WHERE id = 1 AND request_count < ?",
+            (max_requests,),
+        )
+        return cursor.rowcount == 1
 
 
 def add_download(

@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -25,19 +26,23 @@ from utils.download_audit import audit_successful_download
 from utils.chat_cleanup import delete_message_safely
 from utils.download_queue import run_queued_download
 from utils.download_limits import ensure_download_allowed
+from config import AUDD_API_TOKEN, AUDD_MAX_REQUESTS
+from utils.music_recognition import MusicRecognitionError, MusicRecognitionLimitReached, recognize_track
+from utils.logger import logger
 
 
 def download_actions_keyboard(can_convert=False):
     first_row = []
     if can_convert:
         first_row.append(InlineKeyboardButton("🎵 Скачать как MP3", callback_data="download_ui:mp3"))
-    first_row.append(InlineKeyboardButton("📥 Скачать ещё", callback_data="download_ui:again"))
-    return InlineKeyboardMarkup(
-        [
-            first_row,
-            [InlineKeyboardButton("⬅️ В меню", callback_data="download_ui:close")],
-        ]
-    )
+        if AUDD_API_TOKEN and AUDD_MAX_REQUESTS > 0:
+            first_row.append(InlineKeyboardButton("🎶 Найти песню", callback_data="download_ui:recognize"))
+    rows = [first_row] if first_row else []
+    rows.extend([
+        [InlineKeyboardButton("📥 Скачать ещё", callback_data="download_ui:again")],
+        [InlineKeyboardButton("⬅️ В меню", callback_data="download_ui:close")],
+    ])
+    return InlineKeyboardMarkup(rows)
 
 
 def youtube_choice_keyboard():
@@ -382,7 +387,70 @@ async def handle_download_ui_callback(update: Update, context: ContextTypes.DEFA
     await query.answer()
     action = query.data.split(":", 1)[1]
 
-    if action == "mp3":
+    if action == "recognize":
+        user_id = require_effective_user(update).id
+        language = get_user_settings(user_id)["language"]
+        input_path = context.user_data.get("followup_media_path")
+        if not input_path or not Path(input_path).is_file():
+            await message.reply_text(translate(language, "recognition_video_missing"))
+            return
+        if not AUDD_API_TOKEN or AUDD_MAX_REQUESTS <= 0:
+            await message.reply_text(translate(language, "recognition_not_configured"))
+            return
+        await query.edit_message_text(
+            translate(language, "recognition_consent"),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    translate(language, "recognition_continue"),
+                    callback_data="download_ui:recognize_confirm",
+                )],
+                [InlineKeyboardButton(
+                    translate(language, "cancel"),
+                    callback_data="download_ui:recognize_cancel",
+                )],
+            ]),
+        )
+    elif action == "recognize_cancel":
+        language = get_user_settings(require_effective_user(update).id)["language"]
+        await query.edit_message_text(translate(language, "recognition_cancelled"))
+    elif action == "recognize_confirm":
+        user_id = require_effective_user(update).id
+        language = get_user_settings(user_id)["language"]
+        input_path = context.user_data.get("followup_media_path")
+        if not input_path or not Path(input_path).is_file():
+            await message.reply_text(translate(language, "recognition_video_missing"))
+            return
+        if not AUDD_API_TOKEN or AUDD_MAX_REQUESTS <= 0:
+            await message.reply_text(translate(language, "recognition_not_configured"))
+            return
+        status_message = query.message
+        await status_message.edit_text(translate(language, "recognizing_song"))
+        try:
+            result = await recognize_track(input_path, AUDD_MAX_REQUESTS)
+            if not result:
+                await status_message.edit_text(translate(language, "song_not_found"))
+                return
+            title = str(result.get("title", "")).strip()
+            artist = str(result.get("artist", "")).strip()
+            search_query = quote_plus(f"{artist} {title}".strip())
+            await status_message.edit_text(
+                translate(language, "recognized_song", artist=artist or "—", title=title),
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        translate(language, "search_youtube_song"),
+                        url=f"https://www.youtube.com/results?search_query={search_query}",
+                    )
+                ]]),
+            )
+        except MusicRecognitionLimitReached:
+            await status_message.edit_text(translate(language, "recognition_limit_reached"))
+        except MusicRecognitionError as error:
+            logger.warning("Song recognition unavailable: %s", error)
+            await status_message.edit_text(translate(language, "recognition_failed"))
+        except Exception:
+            logger.exception("Unexpected song recognition failure")
+            await status_message.edit_text(translate(language, "recognition_failed"))
+    elif action == "mp3":
         input_path = context.user_data.get("followup_media_path")
         media_dir = context.user_data.get("followup_media_dir")
         if not input_path or not Path(input_path).exists():
