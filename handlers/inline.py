@@ -6,6 +6,8 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
+from collections.abc import Mapping
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from telegram import (
@@ -103,7 +105,7 @@ def _inline_ydl_options(service_key: str) -> dict:
     return options
 
 
-def _find_direct_video(info: dict | None) -> dict | None:
+def _find_direct_video(info: Mapping[str, Any] | None) -> dict | None:
     if not info:
         return None
     entries = list(info.get("entries") or [info])
@@ -171,7 +173,7 @@ def _find_direct_video(info: dict | None) -> dict | None:
 def extract_direct_video(service_key: str, url: str) -> dict | None:
     """Extract a Telegram-fetchable MP4 URL without downloading the media locally."""
     try:
-        with YoutubeDL(_inline_ydl_options(service_key)) as ydl:
+        with YoutubeDL(cast(Any, _inline_ydl_options(service_key))) as ydl:
             info = ydl.extract_info(url, download=False)
         return _find_direct_video(info)
     except Exception as error:
@@ -181,7 +183,7 @@ def extract_direct_video(service_key: str, url: str) -> dict | None:
 
 def _cache_download_options(service_key: str, downloader) -> dict:
     if service_key == "youtube":
-        options = downloader._build_video_options("auto")
+        options: dict[str, Any] = downloader._build_video_options("auto")
     elif service_key == "instagram":
         options = _inline_ydl_options(service_key)
         options.update(
@@ -299,7 +301,7 @@ def build_video_result(service_key: str, url: str, video: dict, used: int, bot_u
     service_name = SERVICES[service_key]["button"].split(" ", 1)[-1]
     result_id = hashlib.sha256(f"inline:{service_key}:{url}".encode("utf-8")).hexdigest()[:32]
     thumbnail = video.get("thumbnail")
-    if urlsplit(thumbnail or "").scheme not in {"http", "https"}:
+    if not isinstance(thumbnail, str) or urlsplit(thumbnail).scheme not in {"http", "https"}:
         return None
     return InlineQueryResultVideo(
         id=result_id,
